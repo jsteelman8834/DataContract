@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Missouri Legislative Graph Database Schema",
+  "version": "1.0.0",
+  "description": "File-based graph database for tracking Missouri legislation lifecycle",
+
+  "nodeTypes": {
+    "bill": {
+      "description": "A legislative bill (HB, SB, HJR, SJR, etc.)",
+      "properties": {
+        "id": "string (e.g., 'bill:hb1607:261')",
+        "billNumber": "string (e.g., 'HB 1607')",
+        "billPrefix": "enum: HB, SB, HJR, SJR, HCR, SCR, HR, SR",
+        "billSuffix": "integer",
+        "session": "string (e.g., '261')",
+        "chamber": "enum: house, senate",
+        "title": "string",
+        "briefDescription": "string",
+        "lrNumber": "string (e.g., '5106H.01I')",
+        "currentStatus": "string (lifecycle status)",
+        "currentCommittee": "string (committee id reference)",
+        "effectiveDate": "date or null",
+        "introducedDate": "date",
+        "lastActionDate": "date",
+        "withdrawn": "boolean",
+        "createdAt": "datetime",
+        "updatedAt": "datetime"
+      }
+    },
+
+    "bill_version": {
+      "description": "A specific version of a bill (introduced, committee substitute, perfected, etc.)",
+      "properties": {
+        "id": "string (e.g., 'version:5106H.01I')",
+        "billId": "string (reference to bill)",
+        "lrNumber": "string",
+        "versionCode": "enum: I (Introduced), C (Committee Sub), P (Perfected), S (Senate Sub), T (Truly Agreed), E (Enacted)",
+        "versionNumber": "integer (01, 02, etc.)",
+        "versionLabel": "string (human readable)",
+        "pdfUrl": "string",
+        "textHash": "string (for change detection)",
+        "pageCount": "integer",
+        "effectiveDate": "date or null",
+        "createdAt": "datetime"
+      }
+    },
+
+    "amendment": {
+      "description": "An amendment to a bill",
+      "properties": {
+        "id": "string (e.g., 'amend:0010H03.01H')",
+        "billId": "string (reference to bill)",
+        "targetVersionId": "string (version being amended)",
+        "amendmentNumber": "string",
+        "lrNumber": "string",
+        "type": "enum: floor, committee, substitute, conference",
+        "status": "enum: pending, adopted, failed, withdrawn, ruled_out_of_order",
+        "sponsorId": "string (member reference)",
+        "description": "string",
+        "pdfUrl": "string",
+        "adoptedDate": "date or null",
+        "createdAt": "datetime"
+      }
+    },
+
+    "fiscal_note": {
+      "description": "Fiscal impact analysis of a bill version",
+      "properties": {
+        "id": "string (e.g., 'fiscal:5106H.01I.ORG')",
+        "billId": "string",
+        "versionId": "string",
+        "noteType": "enum: original, revised, supplemental",
+        "estimatedCost": "number or null",
+        "estimatedRevenue": "number or null",
+        "fundingSource": "string",
+        "summary": "string",
+        "pdfUrl": "string",
+        "publishedDate": "date",
+        "createdAt": "datetime"
+      }
+    },
+
+    "summary": {
+      "description": "Professional or AI-generated bill summary",
+      "properties": {
+        "id": "string",
+        "billId": "string",
+        "versionId": "string",
+        "summaryType": "enum: official, staff, ai_generated",
+        "plainLanguage": "string (accessible summary)",
+        "technicalSummary": "string",
+        "keyProvisions": "array of strings",
+        "affectedStatutes": "array of strings",
+        "pdfUrl": "string or null",
+        "createdAt": "datetime"
+      }
+    },
+
+    "action": {
+      "description": "A legislative action taken on a bill",
+      "properties": {
+        "id": "string (e.g., 'action:hb1607:261:001')",
+        "billId": "string",
+        "sequence": "integer",
+        "actionDate": "date",
+        "actionCode": "string",
+        "actionDescription": "string",
+        "chamber": "enum: house, senate, governor, secretary_of_state",
+        "committeeId": "string or null",
+        "journalPage": "string or null",
+        "isKeyMilestone": "boolean",
+        "createdAt": "datetime"
+      }
+    },
+
+    "vote": {
+      "description": "A recorded vote on a bill or amendment",
+      "properties": {
+        "id": "string (e.g., 'vote:hb1607:261:floor:001')",
+        "billId": "string",
+        "amendmentId": "string or null",
+        "voteType": "enum: passage, amendment, procedural, veto_override",
+        "chamber": "enum: house, senate",
+        "voteDate": "date",
+        "yeas": "integer",
+        "nays": "integer",
+        "present": "integer",
+        "absent": "integer",
+        "required": "integer (votes needed to pass)",
+        "passed": "boolean",
+        "journalPage": "string",
+        "rollCallPdfUrl": "string or null",
+        "createdAt": "datetime"
+      }
+    },
+
+    "member": {
+      "description": "A legislator (representative or senator)",
+      "properties": {
+        "id": "string (e.g., 'member:house:001' or 'member:senate:01')",
+        "chamber": "enum: house, senate",
+        "district": "string",
+        "firstName": "string",
+        "lastName": "string",
+        "fullName": "string",
+        "party": "enum: R, D, I",
+        "title": "string (e.g., 'Speaker', 'Minority Floor Leader')",
+        "email": "string",
+        "phone": "string",
+        "photoUrl": "string",
+        "termStart": "date",
+        "termEnd": "date",
+        "active": "boolean",
+        "createdAt": "datetime",
+        "updatedAt": "datetime"
+      }
+    },
+
+    "committee": {
+      "description": "A legislative committee",
+      "properties": {
+        "id": "string (e.g., 'committee:house:agriculture')",
+        "chamber": "enum: house, senate, joint",
+        "name": "string",
+        "shortName": "string",
+        "type": "enum: standing, special, select, conference, joint",
+        "jurisdiction": "string (description of scope)",
+        "meetingRoom": "string",
+        "meetingSchedule": "string",
+        "active": "boolean",
+        "createdAt": "datetime",
+        "updatedAt": "datetime"
+      }
+    },
+
+    "hearing": {
+      "description": "A committee hearing on one or more bills",
+      "properties": {
+        "id": "string (e.g., 'hearing:2026-01-15:agriculture:001')",
+        "committeeId": "string",
+        "hearingDate": "date",
+        "hearingTime": "string",
+        "room": "string",
+        "type": "enum: public, executive, informational",
+        "status": "enum: scheduled, completed, cancelled, postponed",
+        "agendaUrl": "string or null",
+        "minutesUrl": "string or null",
+        "videoUrl": "string or null",
+        "createdAt": "datetime",
+        "updatedAt": "datetime"
+      }
+    },
+
+    "testimony": {
+      "description": "Public testimony submitted on a bill",
+      "properties": {
+        "id": "string",
+        "billId": "string",
+        "hearingId": "string",
+        "witnessName": "string",
+        "organization": "string or null",
+        "position": "enum: proponent, opponent, neutral, informational",
+        "pdfUrl": "string or null",
+        "videoTimestamp": "string or null",
+        "createdAt": "datetime"
+      }
+    },
+
+    "session": {
+      "description": "A legislative session",
+      "properties": {
+        "id": "string (e.g., 'session:261')",
+        "sessionCode": "string (e.g., '261')",
+        "year": "integer",
+        "type": "enum: regular, extraordinary, veto",
+        "label": "string (e.g., '2026 Second Regular Session')",
+        "assemblyNumber": "integer (e.g., 103)",
+        "startDate": "date",
+        "endDate": "date or null",
+        "active": "boolean",
+        "createdAt": "datetime"
+      }
+    }
+  },
+
+  "edgeTypes": {
+    "SPONSORED_BY": {
+      "description": "Primary sponsor of a bill",
+      "from": "bill",
+      "to": "member",
+      "properties": {
+        "sponsorType": "enum: primary, principal"
+      }
+    },
+
+    "CO_SPONSORED_BY": {
+      "description": "Co-sponsor of a bill",
+      "from": "bill",
+      "to": "member",
+      "properties": {
+        "addedDate": "date"
+      }
+    },
+
+    "HAS_VERSION": {
+      "description": "Bill has a specific version",
+      "from": "bill",
+      "to": "bill_version",
+      "properties": {
+        "isCurrent": "boolean"
+      }
+    },
+
+    "SUPERSEDES": {
+      "description": "One version replaces another",
+      "from": "bill_version",
+      "to": "bill_version",
+      "properties": {
+        "supersededDate": "date"
+      }
+    },
+
+    "AMENDS": {
+      "description": "Amendment modifies a bill version",
+      "from": "amendment",
+      "to": "bill_version",
+      "properties": {}
+    },
+
+    "PROPOSED_BY": {
+      "description": "Member proposed an amendment",
+      "from": "amendment",
+      "to": "member",
+      "properties": {}
+    },
+
+    "ASSIGNED_TO": {
+      "description": "Bill assigned to committee",
+      "from": "bill",
+      "to": "committee",
+      "properties": {
+        "assignedDate": "date",
+        "referralType": "enum: initial, re-referred, sequential",
+        "status": "enum: pending, reported, held, discharged"
+      }
+    },
+
+    "SCHEDULED_FOR": {
+      "description": "Bill scheduled for hearing",
+      "from": "bill",
+      "to": "hearing",
+      "properties": {
+        "agendaPosition": "integer"
+      }
+    },
+
+    "HAS_ACTION": {
+      "description": "Bill has legislative action",
+      "from": "bill",
+      "to": "action",
+      "properties": {}
+    },
+
+    "HAS_VOTE": {
+      "description": "Bill or amendment has recorded vote",
+      "from": ["bill", "amendment"],
+      "to": "vote",
+      "properties": {}
+    },
+
+    "CAST_VOTE": {
+      "description": "Member's vote on a roll call",
+      "from": "member",
+      "to": "vote",
+      "properties": {
+        "voteValue": "enum: yea, nay, present, absent, excused"
+      }
+    },
+
+    "MEMBER_OF": {
+      "description": "Member serves on committee",
+      "from": "member",
+      "to": "committee",
+      "properties": {
+        "role": "enum: chair, vice_chair, ranking_member, member",
+        "startDate": "date",
+        "endDate": "date or null"
+      }
+    },
+
+    "HAS_FISCAL_NOTE": {
+      "description": "Bill version has fiscal note",
+      "from": "bill_version",
+      "to": "fiscal_note",
+      "properties": {}
+    },
+
+    "HAS_SUMMARY": {
+      "description": "Bill version has summary",
+      "from": "bill_version",
+      "to": "summary",
+      "properties": {}
+    },
+
+    "HAS_TESTIMONY": {
+      "description": "Bill has public testimony",
+      "from": "bill",
+      "to": "testimony",
+      "properties": {}
+    },
+
+    "TESTIFIED_AT": {
+      "description": "Testimony given at hearing",
+      "from": "testimony",
+      "to": "hearing",
+      "properties": {}
+    },
+
+    "IN_SESSION": {
+      "description": "Bill belongs to session",
+      "from": "bill",
+      "to": "session",
+      "properties": {}
+    },
+
+    "ORIGINATED_IN": {
+      "description": "Bill originated in chamber/committee",
+      "from": "bill",
+      "to": "committee",
+      "properties": {}
+    },
+
+    "CROSS_CHAMBER": {
+      "description": "Bill sent to other chamber",
+      "from": "bill",
+      "to": "bill",
+      "properties": {
+        "companionType": "enum: identical, similar, amended",
+        "linkedDate": "date"
+      }
+    },
+
+    "COMBINES": {
+      "description": "Bill combines/incorporates another bill",
+      "from": "bill",
+      "to": "bill",
+      "properties": {
+        "combinationType": "enum: merged, incorporated, superseded"
+      }
+    }
+  },
+
+  "lifecycleStatuses": {
+    "description": "Bill lifecycle stages for tracking progress",
+    "stages": [
+      {"code": "prefiled", "label": "Prefiled", "chamber": "origin", "order": 1},
+      {"code": "introduced", "label": "Introduced", "chamber": "origin", "order": 2},
+      {"code": "first_read", "label": "First Read", "chamber": "origin", "order": 3},
+      {"code": "referred", "label": "Referred to Committee", "chamber": "origin", "order": 4},
+      {"code": "in_committee", "label": "In Committee", "chamber": "origin", "order": 5},
+      {"code": "hearing_scheduled", "label": "Hearing Scheduled", "chamber": "origin", "order": 6},
+      {"code": "heard", "label": "Heard in Committee", "chamber": "origin", "order": 7},
+      {"code": "reported_do_pass", "label": "Reported Do Pass", "chamber": "origin", "order": 8},
+      {"code": "second_read", "label": "Second Read", "chamber": "origin", "order": 9},
+      {"code": "perfected", "label": "Perfected", "chamber": "origin", "order": 10},
+      {"code": "third_read", "label": "Third Read", "chamber": "origin", "order": 11},
+      {"code": "passed_origin", "label": "Passed Origin Chamber", "chamber": "origin", "order": 12},
+      {"code": "received_other", "label": "Received in Other Chamber", "chamber": "other", "order": 13},
+      {"code": "referred_other", "label": "Referred to Committee (Other)", "chamber": "other", "order": 14},
+      {"code": "in_committee_other", "label": "In Committee (Other)", "chamber": "other", "order": 15},
+      {"code": "reported_other", "label": "Reported (Other)", "chamber": "other", "order": 16},
+      {"code": "passed_other", "label": "Passed Other Chamber", "chamber": "other", "order": 17},
+      {"code": "conference", "label": "In Conference Committee", "chamber": "joint", "order": 18},
+      {"code": "truly_agreed", "label": "Truly Agreed To and Finally Passed", "chamber": "joint", "order": 19},
+      {"code": "sent_to_governor", "label": "Sent to Governor", "chamber": "executive", "order": 20},
+      {"code": "signed", "label": "Signed by Governor", "chamber": "executive", "order": 21},
+      {"code": "vetoed", "label": "Vetoed by Governor", "chamber": "executive", "order": 22},
+      {"code": "veto_overridden", "label": "Veto Overridden", "chamber": "joint", "order": 23},
+      {"code": "enacted", "label": "Enacted into Law", "chamber": "complete", "order": 24},
+      {"code": "withdrawn", "label": "Withdrawn", "chamber": "terminal", "order": -1},
+      {"code": "failed", "label": "Failed", "chamber": "terminal", "order": -2},
+      {"code": "tabled", "label": "Tabled", "chamber": "terminal", "order": -3}
+    ]
+  },
+
+  "indexes": {
+    "description": "Recommended indexes for fast lookups",
+    "primary": ["id"],
+    "secondary": [
+      "nodes.bill.billNumber",
+      "nodes.bill.currentStatus",
+      "nodes.bill.session",
+      "nodes.member.lastName",
+      "nodes.member.district",
+      "nodes.committee.name",
+      "nodes.action.actionDate",
+      "edges.*.from",
+      "edges.*.to"
+    ]
+  }
+}

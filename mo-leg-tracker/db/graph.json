@@ -1,0 +1,58 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "schema": "./schema.json",
+    "created": "2026-01-16T00:00:00Z",
+    "updated": "2026-01-16T00:00:00Z",
+    "session": "261",
+    "description": "Missouri Legislative Graph Database"
+  },
+
+  "nodes": {
+    "sessions": {},
+    "bills": {},
+    "bill_versions": {},
+    "amendments": {},
+    "fiscal_notes": {},
+    "summaries": {},
+    "actions": {},
+    "votes": {},
+    "members": {},
+    "committees": {},
+    "hearings": {},
+    "testimony": {}
+  },
+
+  "edges": {
+    "SPONSORED_BY": [],
+    "CO_SPONSORED_BY": [],
+    "HAS_VERSION": [],
+    "SUPERSEDES": [],
+    "AMENDS": [],
+    "PROPOSED_BY": [],
+    "ASSIGNED_TO": [],
+    "SCHEDULED_FOR": [],
+    "HAS_ACTION": [],
+    "HAS_VOTE": [],
+    "CAST_VOTE": [],
+    "MEMBER_OF": [],
+    "HAS_FISCAL_NOTE": [],
+    "HAS_SUMMARY": [],
+    "HAS_TESTIMONY": [],
+    "TESTIFIED_AT": [],
+    "IN_SESSION": [],
+    "ORIGINATED_IN": [],
+    "CROSS_CHAMBER": [],
+    "COMBINES": []
+  },
+
+  "_indexes": {
+    "billsByNumber": {},
+    "billsByStatus": {},
+    "billsByCommittee": {},
+    "membersByDistrict": {},
+    "actionsByDate": {},
+    "edgesFrom": {},
+    "edgesTo": {}
+  }
+}
