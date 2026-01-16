@@ -5,11 +5,15 @@ import { useSearchParams } from 'next/navigation';
 import legislativeData from '@/data/legislative-data';
 import { BillCard } from '@/components/bills/BillCard';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/fiscal-utils';
 import { STATUS_LABELS } from '@/types';
 import type { BillStatus } from '@/types';
-import { FileText, Filter, Search, X, Loader2 } from 'lucide-react';
+import { FileText, Filter, Search, X, Loader2, DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
 
 const ALL_STATUSES = Object.keys(STATUS_LABELS) as BillStatus[];
+
+type FiscalFilter = 'all' | 'has_fiscal' | 'no_fiscal' | 'high_impact' | 'revenue_positive';
+type SortOption = 'recent' | 'number' | 'days' | 'impact_high' | 'impact_low' | 'probability';
 
 function BillsContent() {
   const searchParams = useSearchParams();
@@ -21,11 +25,20 @@ function BillsContent() {
   const [statusFilter, setStatusFilter] = useState<BillStatus | 'all'>(
     (searchParams.get('status') as BillStatus) || 'all'
   );
-  const [sortBy, setSortBy] = useState<'recent' | 'number' | 'days'>('recent');
+  const [fiscalFilter, setFiscalFilter] = useState<FiscalFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
 
   const allBills = useMemo(() => {
     return legislativeData.getAllBills().map((bill) => legislativeData.getBillCard(bill));
   }, []);
+
+  // Calculate fiscal summary for display
+  const fiscalSummary = useMemo(() => {
+    const withFiscal = allBills.filter((b) => b.fiscalNote !== null);
+    const totalImpact = withFiscal.reduce((sum, b) => sum + (b.fiscalNote?.netImpact || 0), 0);
+    const weightedImpact = withFiscal.reduce((sum, b) => sum + b.weightedFiscalImpact, 0);
+    return { count: withFiscal.length, totalImpact, weightedImpact };
+  }, [allBills]);
 
   const filteredBills = useMemo(() => {
     let bills = [...allBills];
@@ -52,6 +65,22 @@ function BillsContent() {
       bills = bills.filter((b) => b.bill.currentStatus === statusFilter);
     }
 
+    // Fiscal filter
+    switch (fiscalFilter) {
+      case 'has_fiscal':
+        bills = bills.filter((b) => b.fiscalNote !== null);
+        break;
+      case 'no_fiscal':
+        bills = bills.filter((b) => b.fiscalNote === null);
+        break;
+      case 'high_impact':
+        bills = bills.filter((b) => b.fiscalNote && Math.abs(b.fiscalNote.netImpact) >= 10_000_000);
+        break;
+      case 'revenue_positive':
+        bills = bills.filter((b) => b.fiscalNote && b.fiscalNote.netImpact > 0);
+        break;
+    }
+
     // Sort
     switch (sortBy) {
       case 'recent':
@@ -66,20 +95,38 @@ function BillsContent() {
       case 'days':
         bills.sort((a, b) => b.daysInCommittee - a.daysInCommittee);
         break;
+      case 'impact_high':
+        bills.sort((a, b) => {
+          const impactA = Math.abs(a.fiscalNote?.netImpact || 0);
+          const impactB = Math.abs(b.fiscalNote?.netImpact || 0);
+          return impactB - impactA;
+        });
+        break;
+      case 'impact_low':
+        bills.sort((a, b) => {
+          const impactA = Math.abs(a.fiscalNote?.netImpact || 0);
+          const impactB = Math.abs(b.fiscalNote?.netImpact || 0);
+          return impactA - impactB;
+        });
+        break;
+      case 'probability':
+        bills.sort((a, b) => b.passageProbability - a.passageProbability);
+        break;
     }
 
     return bills;
-  }, [allBills, searchQuery, chamberFilter, statusFilter, sortBy]);
+  }, [allBills, searchQuery, chamberFilter, statusFilter, fiscalFilter, sortBy]);
 
   const clearFilters = () => {
     setSearchQuery('');
     setChamberFilter('all');
     setStatusFilter('all');
+    setFiscalFilter('all');
     setSortBy('recent');
   };
 
   const hasActiveFilters =
-    searchQuery || chamberFilter !== 'all' || statusFilter !== 'all';
+    searchQuery || chamberFilter !== 'all' || statusFilter !== 'all' || fiscalFilter !== 'all';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -92,6 +139,38 @@ function BillsContent() {
         <p className="text-gray-600 mt-2">
           Browse and search all bills in the 103rd General Assembly
         </p>
+      </div>
+
+      {/* Fiscal Summary Bar */}
+      <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl p-4 mb-6 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-slate-300" />
+              <span className="text-slate-300">Fiscal Impact Summary</span>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <span>
+                <span className="text-slate-400">Bills with fiscal notes:</span>{' '}
+                <span className="font-bold">{fiscalSummary.count}</span>
+              </span>
+              <span className="hidden sm:inline">|</span>
+              <span className="hidden sm:flex items-center gap-1">
+                <span className="text-slate-400">Total:</span>{' '}
+                <span className={cn('font-bold', fiscalSummary.totalImpact < 0 ? 'text-red-400' : 'text-green-400')}>
+                  {formatCurrency(fiscalSummary.totalImpact, { compact: true, showSign: true })}
+                </span>
+              </span>
+              <span className="hidden sm:inline">|</span>
+              <span className="hidden sm:flex items-center gap-1">
+                <span className="text-slate-400">Weighted:</span>{' '}
+                <span className={cn('font-bold', fiscalSummary.weightedImpact < 0 ? 'text-orange-400' : 'text-emerald-400')}>
+                  {formatCurrency(fiscalSummary.weightedImpact, { compact: true, showSign: true })}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
@@ -137,15 +216,30 @@ function BillsContent() {
             ))}
           </select>
 
+          {/* Fiscal Filter */}
+          <select
+            value={fiscalFilter}
+            onChange={(e) => setFiscalFilter(e.target.value as FiscalFilter)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mo-blue focus:border-mo-blue"
+          >
+            <option value="all">All Fiscal Status</option>
+            <option value="has_fiscal">Has Fiscal Note</option>
+            <option value="no_fiscal">No Fiscal Note</option>
+            <option value="high_impact">High Impact (&gt;$10M)</option>
+          </select>
+
           {/* Sort */}
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'recent' | 'number' | 'days')}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mo-blue focus:border-mo-blue"
           >
             <option value="recent">Most Recent</option>
             <option value="number">Bill Number</option>
             <option value="days">Days in Committee</option>
+            <option value="impact_high">Highest Impact</option>
+            <option value="impact_low">Lowest Impact</option>
+            <option value="probability">Passage Likelihood</option>
           </select>
 
           {/* Clear Filters */}
