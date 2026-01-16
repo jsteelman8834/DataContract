@@ -14,7 +14,18 @@ import type {
   CommitteeMembershipEdge,
   SponsorshipEdge,
   Edge,
+  FiscalNote,
+  FiscalSummary,
+  CommitteeFiscalSummary,
+  RiskQuadrantBill,
 } from '@/types';
+import {
+  getPassageProbability,
+  calculateWeightedImpact,
+  calculateFiscalSummary,
+  calculateCommitteeFiscalSummaries,
+  classifyRiskQuadrant,
+} from '@/lib/fiscal-utils';
 
 // Import sample data - in production this would be fetched from an API
 import sampleData from '../../db/sample-graph.json';
@@ -159,6 +170,259 @@ const enhancedData: LegislativeGraph = {
         updatedAt: '2026-01-08T00:00:00Z',
       },
     },
+    fiscal_notes: {
+      // SB 834 - Medicaid expansion - Major cost
+      'fiscal:sb834:261:001': {
+        id: 'fiscal:sb834:261:001',
+        billId: 'bill:sb834:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029, 2030, 2031],
+        estimatedCost: 156000000,
+        estimatedRevenue: 89000000,
+        netImpact: -67000000,
+        fundImpacts: {
+          generalRevenue: -45000000,
+          federalFunds: -15000000,
+          otherStateFunds: -7000000,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 28000000, revenue: 15000000, netImpact: -13000000 },
+          { fiscalYear: 2028, cost: 32000000, revenue: 18000000, netImpact: -14000000 },
+          { fiscalYear: 2029, cost: 34000000, revenue: 19000000, netImpact: -15000000 },
+          { fiscalYear: 2030, cost: 31000000, revenue: 18500000, netImpact: -12500000 },
+          { fiscalYear: 2031, cost: 31000000, revenue: 18500000, netImpact: -12500000 },
+        ],
+        uncertaintyRange: { low: -85000000, high: -52000000 },
+        assumptions: [
+          'Federal matching rate remains at current levels',
+          'Enrollment projections based on neighboring state data',
+          'Administrative costs spread over 5-year implementation',
+        ],
+        issuingAgency: 'Office of Administration',
+        analystName: 'Sarah Mitchell',
+        summary: 'This bill would expand Medicaid eligibility, resulting in significant costs offset partially by federal matching funds. Net state cost projected at $67M annually.',
+        pdfUrl: '/fiscal-notes/sb834-fiscal-note.pdf',
+        publishedDate: '2026-01-10',
+        createdAt: '2026-01-10T00:00:00Z',
+        updatedAt: '2026-01-10T00:00:00Z',
+      },
+      // SB 874 - Education funding - Moderate cost
+      'fiscal:sb874:261:001': {
+        id: 'fiscal:sb874:261:001',
+        billId: 'bill:sb874:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029],
+        estimatedCost: 42000000,
+        estimatedRevenue: 0,
+        netImpact: -42000000,
+        fundImpacts: {
+          generalRevenue: -42000000,
+          federalFunds: 0,
+          otherStateFunds: 0,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 12000000, revenue: 0, netImpact: -12000000 },
+          { fiscalYear: 2028, cost: 14000000, revenue: 0, netImpact: -14000000 },
+          { fiscalYear: 2029, cost: 16000000, revenue: 0, netImpact: -16000000 },
+        ],
+        uncertaintyRange: { low: -50000000, high: -35000000 },
+        assumptions: [
+          'School district participation rate of 85%',
+          'Per-pupil funding increase of $150 annually',
+        ],
+        issuingAgency: 'Department of Elementary and Secondary Education',
+        analystName: 'Robert Chen',
+        summary: 'Education funding formula modification would increase state expenditures by approximately $42M over three years.',
+        pdfUrl: '/fiscal-notes/sb874-fiscal-note.pdf',
+        publishedDate: '2026-01-08',
+        createdAt: '2026-01-08T00:00:00Z',
+        updatedAt: '2026-01-08T00:00:00Z',
+      },
+      // HB 1607 - Prison reform - Cost savings (revenue positive)
+      'fiscal:hb1607:261:001': {
+        id: 'fiscal:hb1607:261:001',
+        billId: 'bill:hb1607:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029, 2030],
+        estimatedCost: 8500000,
+        estimatedRevenue: 0,
+        netImpact: -8500000,
+        fundImpacts: {
+          generalRevenue: -8500000,
+          federalFunds: 0,
+          otherStateFunds: 0,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 3000000, revenue: 0, netImpact: -3000000 },
+          { fiscalYear: 2028, cost: 2500000, revenue: 0, netImpact: -2500000 },
+          { fiscalYear: 2029, cost: 1500000, revenue: 0, netImpact: -1500000 },
+          { fiscalYear: 2030, cost: 1500000, revenue: 0, netImpact: -1500000 },
+        ],
+        uncertaintyRange: { low: -12000000, high: -5000000 },
+        assumptions: [
+          'Implementation begins FY2027',
+          'Training costs front-loaded in year one',
+          'Operational savings begin in year two',
+        ],
+        issuingAgency: 'Department of Corrections',
+        analystName: 'Michael Torres',
+        summary: 'Sentencing reform implementation costs partially offset by reduced incarceration expenses in later years.',
+        pdfUrl: '/fiscal-notes/hb1607-fiscal-note.pdf',
+        publishedDate: '2026-01-12',
+        createdAt: '2026-01-12T00:00:00Z',
+        updatedAt: '2026-01-12T00:00:00Z',
+      },
+      // HB 1234 - Small business tax credits - Revenue loss
+      'fiscal:hb1234:261:001': {
+        id: 'fiscal:hb1234:261:001',
+        billId: 'bill:hb1234:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029, 2030, 2031],
+        estimatedCost: 0,
+        estimatedRevenue: -35000000,
+        netImpact: -35000000,
+        fundImpacts: {
+          generalRevenue: -35000000,
+          federalFunds: 0,
+          otherStateFunds: 0,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 0, revenue: -5000000, netImpact: -5000000 },
+          { fiscalYear: 2028, cost: 0, revenue: -7000000, netImpact: -7000000 },
+          { fiscalYear: 2029, cost: 0, revenue: -8000000, netImpact: -8000000 },
+          { fiscalYear: 2030, cost: 0, revenue: -7500000, netImpact: -7500000 },
+          { fiscalYear: 2031, cost: 0, revenue: -7500000, netImpact: -7500000 },
+        ],
+        uncertaintyRange: { low: -45000000, high: -25000000 },
+        assumptions: [
+          'Tax credit utilization rate of 70%',
+          'Average small business qualifies for $2,500 credit',
+          'Economic growth offsets some revenue loss',
+        ],
+        issuingAgency: 'Department of Revenue',
+        analystName: 'Lisa Wong',
+        summary: 'Tax credit program for small businesses would reduce state revenue by approximately $35M annually at full implementation.',
+        pdfUrl: '/fiscal-notes/hb1234-fiscal-note.pdf',
+        publishedDate: '2026-01-14',
+        createdAt: '2026-01-14T00:00:00Z',
+        updatedAt: '2026-01-14T00:00:00Z',
+      },
+      // SB 900 - Transportation funding - Major appropriation
+      'fiscal:sb900:261:001': {
+        id: 'fiscal:sb900:261:001',
+        billId: 'bill:sb900:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029, 2030],
+        estimatedCost: 125000000,
+        estimatedRevenue: 45000000,
+        netImpact: -80000000,
+        fundImpacts: {
+          generalRevenue: -25000000,
+          federalFunds: -35000000,
+          otherStateFunds: -20000000,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 35000000, revenue: 10000000, netImpact: -25000000 },
+          { fiscalYear: 2028, cost: 32000000, revenue: 12000000, netImpact: -20000000 },
+          { fiscalYear: 2029, cost: 30000000, revenue: 12000000, netImpact: -18000000 },
+          { fiscalYear: 2030, cost: 28000000, revenue: 11000000, netImpact: -17000000 },
+        ],
+        uncertaintyRange: { low: -100000000, high: -65000000 },
+        assumptions: [
+          'Federal infrastructure matching at 80%',
+          'Bond issuance over 4-year period',
+          'Local government cost-sharing of 15%',
+        ],
+        issuingAgency: 'Missouri Department of Transportation',
+        analystName: 'James Patterson',
+        summary: 'Transportation infrastructure investment with federal matching funds. Net state cost of $80M over four years.',
+        pdfUrl: '/fiscal-notes/sb900-fiscal-note.pdf',
+        publishedDate: '2026-01-11',
+        createdAt: '2026-01-11T00:00:00Z',
+        updatedAt: '2026-01-11T00:00:00Z',
+      },
+      // HB 1500 - Healthcare transparency - Minimal cost
+      'fiscal:hb1500:261:001': {
+        id: 'fiscal:hb1500:261:001',
+        billId: 'bill:hb1500:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028],
+        estimatedCost: 1200000,
+        estimatedRevenue: 0,
+        netImpact: -1200000,
+        fundImpacts: {
+          generalRevenue: -1200000,
+          federalFunds: 0,
+          otherStateFunds: 0,
+          localGovernment: 0,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 800000, revenue: 0, netImpact: -800000 },
+          { fiscalYear: 2028, cost: 400000, revenue: 0, netImpact: -400000 },
+        ],
+        uncertaintyRange: { low: -1500000, high: -900000 },
+        assumptions: [
+          'Database development costs in year one',
+          'Ongoing maintenance costs minimal',
+          'No additional FTEs required',
+        ],
+        issuingAgency: 'Department of Health and Senior Services',
+        analystName: 'Karen Martinez',
+        summary: 'Healthcare price transparency requirements with modest implementation costs.',
+        pdfUrl: '/fiscal-notes/hb1500-fiscal-note.pdf',
+        publishedDate: '2026-01-15',
+        createdAt: '2026-01-15T00:00:00Z',
+        updatedAt: '2026-01-15T00:00:00Z',
+      },
+      // SB 850 - Senior property tax relief - Revenue loss
+      'fiscal:sb850:261:001': {
+        id: 'fiscal:sb850:261:001',
+        billId: 'bill:sb850:261',
+        versionId: null,
+        noteType: 'original',
+        fiscalYears: [2027, 2028, 2029, 2030, 2031],
+        estimatedCost: 0,
+        estimatedRevenue: -28000000,
+        netImpact: -28000000,
+        fundImpacts: {
+          generalRevenue: 0,
+          federalFunds: 0,
+          otherStateFunds: 0,
+          localGovernment: -28000000,
+        },
+        yearByYearImpact: [
+          { fiscalYear: 2027, cost: 0, revenue: -4500000, netImpact: -4500000 },
+          { fiscalYear: 2028, cost: 0, revenue: -5500000, netImpact: -5500000 },
+          { fiscalYear: 2029, cost: 0, revenue: -6000000, netImpact: -6000000 },
+          { fiscalYear: 2030, cost: 0, revenue: -6000000, netImpact: -6000000 },
+          { fiscalYear: 2031, cost: 0, revenue: -6000000, netImpact: -6000000 },
+        ],
+        uncertaintyRange: { low: -35000000, high: -22000000 },
+        assumptions: [
+          'Estimated 85,000 eligible seniors',
+          'Average property tax relief of $330 per household',
+          'Local government absorbs revenue impact',
+        ],
+        issuingAgency: 'State Tax Commission',
+        analystName: 'David Anderson',
+        summary: 'Property tax exemption for seniors would reduce local government revenues by $28M annually. State backfill not included.',
+        pdfUrl: '/fiscal-notes/sb850-fiscal-note.pdf',
+        publishedDate: '2026-01-13',
+        createdAt: '2026-01-13T00:00:00Z',
+        updatedAt: '2026-01-13T00:00:00Z',
+      },
+    },
     hearings: {
       ...(sampleData as unknown as LegislativeGraph).nodes.hearings,
       'hearing:2026-01-21:ways_means:001': {
@@ -232,6 +496,15 @@ const enhancedData: LegislativeGraph = {
   },
   edges: {
     ...(sampleData as unknown as LegislativeGraph).edges,
+    HAS_FISCAL_NOTE: [
+      { from: 'bill:sb834:261', to: 'fiscal:sb834:261:001', properties: {} },
+      { from: 'bill:sb874:261', to: 'fiscal:sb874:261:001', properties: {} },
+      { from: 'bill:hb1607:261', to: 'fiscal:hb1607:261:001', properties: {} },
+      { from: 'bill:hb1234:261', to: 'fiscal:hb1234:261:001', properties: {} },
+      { from: 'bill:sb900:261', to: 'fiscal:sb900:261:001', properties: {} },
+      { from: 'bill:hb1500:261', to: 'fiscal:hb1500:261:001', properties: {} },
+      { from: 'bill:sb850:261', to: 'fiscal:sb850:261:001', properties: {} },
+    ],
     ASSIGNED_TO: [
       ...(sampleData as unknown as LegislativeGraph).edges.ASSIGNED_TO,
       {
@@ -472,10 +745,73 @@ class LegislativeDataService {
       .filter((b): b is Bill => b !== null);
   }
 
+  // Fiscal Notes
+  getAllFiscalNotes(): FiscalNote[] {
+    return Object.values(this.data.nodes.fiscal_notes);
+  }
+
+  getFiscalNoteById(id: string): FiscalNote | null {
+    return this.data.nodes.fiscal_notes[id] || null;
+  }
+
+  getFiscalNoteForBill(billId: string): FiscalNote | null {
+    const edge = this.data.edges.HAS_FISCAL_NOTE?.find((e) => e.from === billId);
+    return edge ? this.getFiscalNoteById(edge.to) : null;
+  }
+
+  getBillsWithFiscalNotes(): Array<{ bill: Bill; fiscalNote: FiscalNote }> {
+    const result: Array<{ bill: Bill; fiscalNote: FiscalNote }> = [];
+
+    for (const edge of this.data.edges.HAS_FISCAL_NOTE || []) {
+      const bill = this.getBillById(edge.from);
+      const fiscalNote = this.getFiscalNoteById(edge.to);
+      if (bill && fiscalNote) {
+        result.push({ bill, fiscalNote });
+      }
+    }
+
+    return result;
+  }
+
+  // Fiscal summaries
+  getSessionFiscalSummary(): FiscalSummary {
+    const billsWithFiscal = this.getBillsWithFiscalNotes();
+    return calculateFiscalSummary(billsWithFiscal);
+  }
+
+  getCommitteeFiscalSummaries(): CommitteeFiscalSummary[] {
+    const billsWithFiscal = this.getBillsWithFiscalNotes();
+    const committees = this.getAllCommittees();
+    return calculateCommitteeFiscalSummaries(billsWithFiscal, committees);
+  }
+
+  getRiskQuadrantBills(): RiskQuadrantBill[] {
+    const billsWithFiscal = this.getBillsWithFiscalNotes();
+    return billsWithFiscal.map(({ bill, fiscalNote }) =>
+      classifyRiskQuadrant(bill, fiscalNote)
+    );
+  }
+
+  getHighImpactBills(threshold: number = 10_000_000): Array<{ bill: Bill; fiscalNote: FiscalNote; weightedImpact: number }> {
+    const billsWithFiscal = this.getBillsWithFiscalNotes();
+    return billsWithFiscal
+      .map(({ bill, fiscalNote }) => ({
+        bill,
+        fiscalNote,
+        weightedImpact: calculateWeightedImpact(
+          fiscalNote.netImpact,
+          getPassageProbability(bill.currentStatus)
+        ),
+      }))
+      .filter(({ fiscalNote }) => Math.abs(fiscalNote.netImpact) >= threshold)
+      .sort((a, b) => Math.abs(b.weightedImpact) - Math.abs(a.weightedImpact));
+  }
+
   // Computed data for UI
   getBillCard(bill: Bill): BillCard {
     const sponsor = this.getSponsorForBill(bill.id);
     const summary = this.getSummaryForBill(bill.id);
+    const fiscalNote = this.getFiscalNoteForBill(bill.id);
     const assignment = this.data.edges.ASSIGNED_TO.find(
       (e) => e.from === bill.id && (e.properties as CommitteeAssignmentEdge).status === 'pending'
     );
@@ -489,12 +825,20 @@ class LegislativeDataService {
       (h) => h.hearingDate >= new Date().toISOString().split('T')[0]
     );
 
+    const passageProbability = getPassageProbability(bill.currentStatus);
+    const weightedFiscalImpact = fiscalNote
+      ? calculateWeightedImpact(fiscalNote.netImpact, passageProbability)
+      : 0;
+
     return {
       bill,
       sponsor,
       daysInCommittee,
       hasUpcomingHearing: upcomingHearings.length > 0,
       summary,
+      fiscalNote,
+      passageProbability,
+      weightedFiscalImpact,
     };
   }
 

@@ -194,6 +194,66 @@ export interface Testimony {
   createdAt: string;
 }
 
+// Fiscal Note Types
+export interface FiscalYearImpact {
+  fiscalYear: number;
+  cost: number;
+  revenue: number;
+  netImpact: number;
+}
+
+export interface FundImpact {
+  generalRevenue: number;
+  federalFunds: number;
+  otherStateFunds: number;
+  localGovernment: number;
+}
+
+export interface FiscalNote {
+  id: string;
+  billId: string;
+  versionId: string | null;
+  noteType: 'original' | 'revised' | 'supplemental' | 'corrected';
+
+  // Core fiscal data
+  fiscalYears: number[];
+  estimatedCost: number | null;
+  estimatedRevenue: number | null;
+  netImpact: number;
+
+  // Breakdown by fund type
+  fundImpacts: FundImpact;
+
+  // Multi-year projections
+  yearByYearImpact: FiscalYearImpact[];
+
+  // Uncertainty and confidence
+  uncertaintyRange: { low: number; high: number } | null;
+  assumptions: string[];
+
+  // Metadata
+  issuingAgency: string;
+  analystName: string | null;
+  summary: string;
+  pdfUrl: string | null;
+  publishedDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FiscalImpactType = 'cost_only' | 'revenue_only' | 'both' | 'revenue_positive' | 'neutral';
+
+export interface FiscalSummary {
+  totalCost: number;
+  totalRevenue: number;
+  netImpact: number;
+  weightedCost: number;
+  weightedRevenue: number;
+  weightedNetImpact: number;
+  billCount: number;
+  highImpactBillCount: number;
+}
+
 // Edge types for relationships
 export interface Edge<T = Record<string, unknown>> {
   from: string;
@@ -232,7 +292,7 @@ export interface LegislativeGraph {
     bills: Record<string, Bill>;
     bill_versions: Record<string, BillVersion>;
     amendments: Record<string, Amendment>;
-    fiscal_notes: Record<string, unknown>;
+    fiscal_notes: Record<string, FiscalNote>;
     summaries: Record<string, Summary>;
     actions: Record<string, Action>;
     votes: Record<string, Vote>;
@@ -281,6 +341,9 @@ export interface BillCard {
   daysInCommittee: number;
   hasUpcomingHearing: boolean;
   summary: Summary | null;
+  fiscalNote: FiscalNote | null;
+  passageProbability: number;
+  weightedFiscalImpact: number;
 }
 
 export interface CommitteeWithBills {
@@ -345,3 +408,41 @@ export const STATUS_LABELS: Record<BillStatus, string> = {
   tabled: 'Tabled',
   withdrawn: 'Withdrawn',
 };
+
+// Fiscal-related types for dashboard
+export interface CommitteeFiscalSummary {
+  committee: Committee;
+  totalCost: number;
+  totalRevenue: number;
+  netImpact: number;
+  weightedNetImpact: number;
+  billCount: number;
+}
+
+export interface SessionFiscalSnapshot {
+  date: string;
+  totalCost: number;
+  totalRevenue: number;
+  netImpact: number;
+  weightedNetImpact: number;
+  billsPassed: number;
+  billsFailed: number;
+}
+
+export interface FiscalWatchItem {
+  bill: Bill;
+  fiscalNote: FiscalNote;
+  passageProbability: number;
+  weightedImpact: number;
+  addedDate: string;
+  alertThreshold: number;
+}
+
+export interface RiskQuadrantBill {
+  bill: Bill;
+  fiscalNote: FiscalNote;
+  probability: number;
+  absoluteImpact: number;
+  impactType: 'cost' | 'revenue';
+  quadrant: 'critical' | 'watch' | 'tracking' | 'monitor';
+}

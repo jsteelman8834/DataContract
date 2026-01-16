@@ -1,11 +1,13 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import legislativeData from '@/data/legislative-data';
 import { cn, formatDate, getPartyColor, getBillTypeLabel } from '@/lib/utils';
+import { getPassageProbability } from '@/lib/fiscal-utils';
 import { STATUS_LABELS } from '@/types';
+import { FiscalSummaryCard, FiscalDetailModal } from '@/components/fiscal';
 import {
   FileText,
   User,
@@ -25,6 +27,7 @@ interface BillPageProps {
 
 export default function BillPage({ params }: BillPageProps) {
   const { slug } = use(params);
+  const [fiscalModalOpen, setFiscalModalOpen] = useState(false);
 
   // Convert slug (e.g., "sb-834") to bill number (e.g., "SB 834")
   const billNumber = slug.toUpperCase().replace('-', ' ');
@@ -41,6 +44,8 @@ export default function BillPage({ params }: BillPageProps) {
   const coSponsors = legislativeData.getCoSponsorsForBill(bill.id);
   const actions = legislativeData.getActionsForBill(bill.id);
   const summary = legislativeData.getSummaryForBill(bill.id);
+  const fiscalNote = legislativeData.getFiscalNoteForBill(bill.id);
+  const passageProbability = getPassageProbability(bill.currentStatus);
   const committee = bill.currentCommittee
     ? legislativeData.getCommitteeById(bill.currentCommittee)
     : null;
@@ -220,6 +225,15 @@ export default function BillPage({ params }: BillPageProps) {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Fiscal Impact */}
+          {fiscalNote && (
+            <FiscalSummaryCard
+              fiscalNote={fiscalNote}
+              passageProbability={passageProbability}
+              onViewDetails={() => setFiscalModalOpen(true)}
+            />
+          )}
+
           {/* Sponsor */}
           {sponsor && (
             <section className="bg-white rounded-xl border border-gray-200 p-4">
@@ -350,6 +364,17 @@ export default function BillPage({ params }: BillPageProps) {
           </section>
         </div>
       </div>
+
+      {/* Fiscal Detail Modal */}
+      {fiscalNote && (
+        <FiscalDetailModal
+          fiscalNote={fiscalNote}
+          bill={bill}
+          passageProbability={passageProbability}
+          isOpen={fiscalModalOpen}
+          onClose={() => setFiscalModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -12,12 +12,14 @@ import {
   Search,
   Menu,
   X,
+  DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Bills', href: '/bills', icon: FileText },
+  { name: 'Fiscal', href: '/fiscal', icon: DollarSign },
   { name: 'Committees', href: '/committees', icon: Building2 },
   { name: 'Members', href: '/members', icon: Users },
   { name: 'Calendar', href: '/calendar', icon: Calendar },

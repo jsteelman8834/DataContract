@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { cn, formatDate, getPartyColor, truncate } from '@/lib/utils';
+import { formatCurrency, formatPercentage, getFiscalImpactColor } from '@/lib/fiscal-utils';
 import type { BillCard as BillCardType } from '@/types';
 import { STATUS_LABELS } from '@/types';
-import { Calendar, User, Clock, ChevronRight, FileText } from 'lucide-react';
+import { Calendar, User, Clock, ChevronRight, FileText, DollarSign } from 'lucide-react';
 
 interface BillCardProps {
   billCard: BillCardType;
@@ -12,7 +13,7 @@ interface BillCardProps {
 }
 
 export function BillCard({ billCard, compact = false }: BillCardProps) {
-  const { bill, sponsor, daysInCommittee, hasUpcomingHearing, summary } = billCard;
+  const { bill, sponsor, daysInCommittee, hasUpcomingHearing, summary, fiscalNote, passageProbability, weightedFiscalImpact } = billCard;
 
   const chamberColor = bill.chamber === 'senate' ? 'bg-mo-navy' : 'bg-mo-blue';
   const chamberBorder = bill.chamber === 'senate' ? 'border-l-mo-navy' : 'border-l-mo-blue';
@@ -104,6 +105,30 @@ export function BillCard({ billCard, compact = false }: BillCardProps) {
             <p className="text-sm text-gray-700 line-clamp-2">
               {truncate(summary.plainLanguage, 150)}
             </p>
+          </div>
+        )}
+
+        {/* Fiscal Impact Badge */}
+        {fiscalNote && (
+          <div className="flex items-center gap-3 mb-3 p-2 bg-slate-50 rounded-lg">
+            <div className="flex items-center gap-1">
+              <DollarSign className="w-4 h-4 text-slate-500" />
+              <span className="text-xs text-slate-500">Fiscal Impact:</span>
+            </div>
+            <span className={cn('text-sm font-semibold', getFiscalImpactColor(fiscalNote.netImpact))}>
+              {formatCurrency(fiscalNote.netImpact, { compact: true, showSign: true })}
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-xs text-slate-500">
+              Weighted:
+              <span className={cn('font-medium ml-1', getFiscalImpactColor(weightedFiscalImpact))}>
+                {formatCurrency(weightedFiscalImpact, { compact: true, showSign: true })}
+              </span>
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-xs text-slate-500">
+              {formatPercentage(passageProbability)} likely
+            </span>
           </div>
         )}
 
