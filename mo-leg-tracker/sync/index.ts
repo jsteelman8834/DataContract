@@ -4,7 +4,7 @@
  * Main entry point for synchronizing data from official sources
  */
 
-import { config, generateBillId, generateCommitteeId } from './config';
+import { config } from './config';
 import {
   fetchBillList,
   fetchBillDetail,
@@ -105,8 +105,8 @@ export async function fullSync(): Promise<SyncStats> {
 
     // Update sync metadata
     db._meta.syncState = {
-      ...db._meta.syncState,
       lastFullSync: new Date().toISOString(),
+      lastIncrementalSync: db._meta.syncState?.lastIncrementalSync ?? null,
       lastSyncDuration: Date.now() - stats.startTime,
       totalBills: Object.keys(db.nodes.bills).length,
       totalMembers: Object.keys(db.nodes.members).length,
@@ -155,7 +155,7 @@ export async function incrementalSync(): Promise<SyncStats> {
 
     // Update sync metadata
     db._meta.syncState = {
-      ...db._meta.syncState,
+      lastFullSync: db._meta.syncState?.lastFullSync ?? null,
       lastIncrementalSync: new Date().toISOString(),
       lastSyncDuration: Date.now() - stats.startTime,
       totalBills: Object.keys(db.nodes.bills).length,

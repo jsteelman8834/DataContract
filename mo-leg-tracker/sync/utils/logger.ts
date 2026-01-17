@@ -4,13 +4,6 @@
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-interface LogEntry {
-  timestamp: string;
-  level: LogLevel;
-  message: string;
-  context?: Record<string, unknown>;
-}
-
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
   info: 1,

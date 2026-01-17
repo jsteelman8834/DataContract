@@ -107,9 +107,9 @@ export const config = {
     retryBackoffBase: 1000,
   },
 
-  // Database paths
+  // Database paths - webapp/db is the single source of truth
   database: {
-    graphPath: './db/graph.json',
+    graphPath: '../webapp/db/graph.json',
     schemaPath: './db/schema.json',
     syncStatePath: './db/sync-state.json',
     syncLogPath: './logs/sync-log.jsonl',

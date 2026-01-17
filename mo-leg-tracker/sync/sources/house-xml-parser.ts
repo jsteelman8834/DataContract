@@ -27,19 +27,48 @@ const xmlParser = new XMLParser({
 });
 
 // Type definitions for parsed XML data
-interface RawHouseBill {
-  BillNum?: string;
+
+// Bill list entry (from 261-BillList.XML)
+interface RawBillListEntry {
   BillType?: string;
-  Desc?: string;
-  Sponsor?: string;
-  LRNum?: string;
-  CurrentStatus?: string;
-  Committee?: string;
+  BillNumber?: number;
+  SessionYear?: number;
+  SessionCode?: string;
+  BillXMLLink?: string;
+  LastTimeRun?: string;
+}
+
+// Full bill info (from individual bill XML like 261-HB2.xml)
+interface RawHouseBill {
+  BillNumber?: string;
+  CurrentBillString?: string;
+  Title?: {
+    ShortTitle?: string;
+    LongTitle?: string;
+  };
+  ProposedEffectiveDate?: string;
+  CurrentLRNumber?: string;
   LastAction?: string;
-  LastActionDate?: string;
-  EffectiveDate?: string;
-  CoSponsors?: { Sponsor?: string | string[] };
-  Actions?: { Action?: RawHouseAction | RawHouseAction[] };
+  Calendar?: string;
+  Sponsor?: {
+    SponsorType?: string;
+    FullName?: string;
+    District?: string;
+  } | Array<{
+    SponsorType?: string;
+    FullName?: string;
+    District?: string;
+  }>;
+  BillText?: {
+    BillTextLink?: string;
+    LRNumber?: string;
+    DocumentName?: string;
+  } | Array<{
+    BillTextLink?: string;
+    LRNumber?: string;
+    DocumentName?: string;
+  }>;
+  Action?: RawHouseAction | RawHouseAction[];
 }
 
 interface RawHouseAction {
@@ -49,6 +78,11 @@ interface RawHouseAction {
   Chamber?: string;
   Committee?: string;
   JrnPg?: string;
+  // Fields from individual bill XML
+  PubDate?: string;
+  ActivitySequence?: number;
+  Guid?: string;
+  Link?: string;
 }
 
 interface RawHouseMember {
@@ -180,7 +214,7 @@ async function fetchXml<T>(url: string): Promise<T> {
 }
 
 /**
- * Parse the bill list feed
+ * Parse the bill list feed - returns list of bill entries with links
  */
 export async function fetchBillList(): Promise<ParsedBill[]> {
   const url = buildHouseUrl(config.house.feeds.billList, {
@@ -191,16 +225,48 @@ export async function fetchBillList(): Promise<ParsedBill[]> {
   const startTime = Date.now();
 
   try {
-    const data = await fetchXml<{ BillList?: { Bill?: RawHouseBill | RawHouseBill[] } }>(url);
+    const data = await fetchXml<{ ROOT?: { BillXML?: RawBillListEntry | RawBillListEntry[] } }>(url);
 
-    const rawBills = data.BillList?.Bill;
+    const rawBills = data.ROOT?.BillXML;
     if (!rawBills) {
       logger.warn('No bills found in feed');
       return [];
     }
 
     const billArray = Array.isArray(rawBills) ? rawBills : [rawBills];
-    const bills = billArray.map(parseBill).filter((b): b is ParsedBill => b !== null);
+
+    // Convert bill list entries to ParsedBill with basic info
+    // Full details require fetching individual bill XMLs
+    const bills: ParsedBill[] = [];
+    for (const entry of billArray) {
+      if (!entry.BillType || !entry.BillNumber) continue;
+
+      const prefix = entry.BillType;
+      const suffix = entry.BillNumber;
+      const billNumber = `${prefix} ${suffix}`;
+      const id = generateBillId(prefix, suffix, config.session.code);
+
+      bills.push({
+        id,
+        billNumber,
+        billPrefix: prefix,
+        billSuffix: suffix,
+        session: config.session.code,
+        chamber: 'house',
+        title: '', // Will be filled by fetchBillDetail
+        briefDescription: '',
+        lrNumber: '',
+        currentStatus: 'introduced',
+        currentCommittee: null,
+        effectiveDate: null,
+        introducedDate: null,
+        lastActionDate: null,
+        withdrawn: false,
+        sponsor: null,
+        coSponsors: [],
+        actions: [],
+      });
+    }
 
     logger.syncComplete('fetch bill list', { total: bills.length }, Date.now() - startTime);
 
@@ -225,14 +291,14 @@ export async function fetchBillDetail(prefix: string, number: number): Promise<P
     logger.debug(`Fetching bill detail: ${prefix}${number}`);
 
     try {
-      const data = await fetchXml<{ BillInfo?: RawHouseBill }>(url);
+      const data = await fetchXml<{ ROOT?: { BillInformation?: RawHouseBill } }>(url);
 
-      if (!data.BillInfo) {
+      if (!data.ROOT?.BillInformation) {
         logger.warn(`Bill not found: ${prefix}${number}`);
         return null;
       }
 
-      return parseBill(data.BillInfo, true);
+      return parseBillFromDetail(data.ROOT.BillInformation, prefix, number);
     } catch (error) {
       logger.error(`Failed to fetch bill detail: ${prefix}${number}`, { error: (error as Error).message });
       return null;
@@ -338,50 +404,41 @@ export async function fetchHearingList(): Promise<ParsedHearing[]> {
 
 // Helper functions
 
-function parseBill(raw: RawHouseBill, includeActions = false): ParsedBill | null {
-  if (!raw.BillNum || !raw.BillType) {
-    return null;
-  }
+/**
+ * Parse bill from detailed XML (261-HB2.xml format)
+ */
+function parseBillFromDetail(raw: RawHouseBill, prefix: string, number: number): ParsedBill | null {
+  const billId = generateBillId(prefix, number, config.session.code);
 
-  const billNumber = raw.BillNum.trim();
-  const match = billNumber.match(/([A-Z]+)\s*(\d+)/);
-  if (!match) return null;
-
-  const prefix = match[1];
-  const suffix = parseInt(match[2], 10);
-  const billId = generateBillId(prefix, suffix, config.session.code);
-
-  // Parse sponsor
+  // Parse sponsor from Sponsor object/array
   let sponsor: ParsedSponsor | null = null;
   if (raw.Sponsor) {
-    const sponsorMatch = raw.Sponsor.match(/(.+?)(?:\s*\((\d+)\))?$/);
-    if (sponsorMatch) {
+    const sponsorData = Array.isArray(raw.Sponsor)
+      ? raw.Sponsor.find(s => s.SponsorType === 'Sponsor') || raw.Sponsor[0]
+      : raw.Sponsor;
+
+    if (sponsorData?.FullName) {
       sponsor = {
-        memberId: sponsorMatch[2]
-          ? generateMemberId('house', sponsorMatch[2])
-          : `member:unknown:${raw.Sponsor.toLowerCase().replace(/\s+/g, '_')}`,
-        name: sponsorMatch[1].trim(),
-        district: sponsorMatch[2] || null,
+        memberId: sponsorData.District
+          ? generateMemberId('house', String(sponsorData.District).padStart(3, '0'))
+          : `member:unknown:${sponsorData.FullName.toLowerCase().replace(/\s+/g, '_')}`,
+        name: sponsorData.FullName,
+        district: sponsorData.District || null,
       };
     }
   }
 
   // Parse co-sponsors
   const coSponsors: ParsedSponsor[] = [];
-  if (raw.CoSponsors?.Sponsor) {
-    const coSponsorList = Array.isArray(raw.CoSponsors.Sponsor)
-      ? raw.CoSponsors.Sponsor
-      : [raw.CoSponsors.Sponsor];
-
-    for (const cs of coSponsorList) {
-      const csMatch = cs.match(/(.+?)(?:\s*\((\d+)\))?$/);
-      if (csMatch) {
+  if (raw.Sponsor && Array.isArray(raw.Sponsor)) {
+    for (const s of raw.Sponsor) {
+      if (s.SponsorType !== 'Sponsor' && s.FullName) {
         coSponsors.push({
-          memberId: csMatch[2]
-            ? generateMemberId('house', csMatch[2])
-            : `member:unknown:${cs.toLowerCase().replace(/\s+/g, '_')}`,
-          name: csMatch[1].trim(),
-          district: csMatch[2] || null,
+          memberId: s.District
+            ? generateMemberId('house', String(s.District).padStart(3, '0'))
+            : `member:unknown:${s.FullName.toLowerCase().replace(/\s+/g, '_')}`,
+          name: s.FullName,
+          district: s.District || null,
         });
       }
     }
@@ -389,51 +446,73 @@ function parseBill(raw: RawHouseBill, includeActions = false): ParsedBill | null
 
   // Parse actions
   const actions: ParsedAction[] = [];
-  if (includeActions && raw.Actions?.Action) {
-    const actionList = Array.isArray(raw.Actions.Action)
-      ? raw.Actions.Action
-      : [raw.Actions.Action];
-
+  if (raw.Action) {
+    const actionList = Array.isArray(raw.Action) ? raw.Action : [raw.Action];
     actionList.forEach((action, index) => {
-      const parsed = parseAction(action, billId, index + 1);
-      if (parsed) {
-        actions.push(parsed);
+      if (action.Description && action.PubDate) {
+        actions.push({
+          id: generateActionId(billId, index + 1),
+          billId,
+          sequence: action.ActivitySequence || index + 1,
+          actionDate: parseDate(action.PubDate) || action.PubDate,
+          actionCode: extractActionCode(action.Description),
+          actionDescription: action.Description,
+          chamber: 'house',
+          committeeId: null,
+          journalPage: null,
+          isKeyMilestone: isKeyMilestone(extractActionCode(action.Description)),
+        });
       }
     });
   }
 
-  // Determine current status from action code or text
+  // Determine status from Calendar or LastAction
   let currentStatus = 'introduced';
-  if (raw.CurrentStatus) {
-    const statusCode = raw.CurrentStatus.toUpperCase().trim();
-    currentStatus = ACTION_STATUS_MAP[statusCode] || mapStatusFromDescription(raw.CurrentStatus);
+  if (raw.Calendar) {
+    currentStatus = mapStatusFromDescription(raw.Calendar);
+  } else if (raw.LastAction) {
+    currentStatus = mapStatusFromDescription(raw.LastAction);
   }
 
   // Parse dates
-  const lastActionDate = raw.LastActionDate ? parseDate(raw.LastActionDate) : null;
-  const effectiveDate = raw.EffectiveDate ? parseDate(raw.EffectiveDate) : null;
+  const effectiveDate = raw.ProposedEffectiveDate ? parseDate(raw.ProposedEffectiveDate) : null;
 
-  // Find introduced date from actions
+  // Get last action date from actions
+  let lastActionDate: string | null = null;
+  if (actions.length > 0) {
+    lastActionDate = actions.reduce((latest, action) =>
+      action.actionDate > latest ? action.actionDate : latest
+    , actions[0].actionDate);
+  }
+
+  // Find introduced date
   let introducedDate: string | null = null;
   if (actions.length > 0) {
     const introAction = actions.find(a =>
       a.actionCode === 'INTR' || a.actionCode === '1RD' || a.actionCode === 'PREF'
     );
-    introducedDate = introAction?.actionDate || actions[0].actionDate;
+    introducedDate = introAction?.actionDate || actions[actions.length - 1].actionDate;
+  }
+
+  // Get LR number from BillText
+  let lrNumber = raw.CurrentLRNumber || '';
+  if (raw.BillText) {
+    const billText = Array.isArray(raw.BillText) ? raw.BillText[0] : raw.BillText;
+    lrNumber = billText.LRNumber || lrNumber;
   }
 
   return {
     id: billId,
-    billNumber: `${prefix} ${suffix}`,
+    billNumber: `${prefix} ${number}`,
     billPrefix: prefix,
-    billSuffix: suffix,
+    billSuffix: number,
     session: config.session.code,
-    chamber: prefix.startsWith('H') ? 'house' : 'senate',
-    title: raw.Desc?.trim() || '',
-    briefDescription: raw.Desc?.trim() || '',
-    lrNumber: raw.LRNum?.trim() || '',
+    chamber: 'house',
+    title: raw.Title?.LongTitle || raw.Title?.ShortTitle || '',
+    briefDescription: raw.Title?.ShortTitle || raw.Title?.LongTitle || '',
+    lrNumber,
     currentStatus,
-    currentCommittee: raw.Committee ? generateCommitteeId('house', raw.Committee) : null,
+    currentCommittee: null, // Would need to parse from actions
     effectiveDate,
     introducedDate,
     lastActionDate,

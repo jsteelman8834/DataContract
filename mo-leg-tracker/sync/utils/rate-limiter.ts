@@ -94,7 +94,7 @@ export class RateLimiter {
         await this.sleep(delay);
 
         // Re-queue with updated retry count
-        this.queue.unshift(request);
+        this.queue.unshift(request as QueuedRequest<unknown>);
       } else {
         request.reject(error as Error);
       }

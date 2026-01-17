@@ -6,6 +6,7 @@
  */
 
 import * as cheerio from 'cheerio';
+import type { Element } from 'domhandler';
 import {
   config,
   buildSenateUrl,
@@ -13,7 +14,6 @@ import {
   generateMemberId,
   generateCommitteeId,
   generateActionId,
-  ACTION_STATUS_MAP,
 } from '../config';
 import { senateRateLimiter } from '../utils/rate-limiter';
 import { senateLogger as logger } from '../utils/logger';
@@ -386,7 +386,7 @@ export async function fetchBillStatuteMapping(): Promise<Map<string, string[]>> 
 
 // Parser helper functions
 
-function parseBillRow($: cheerio.CheerioAPI, $row: cheerio.Cheerio<cheerio.Element>): ParsedSenateBill | null {
+function parseBillRow($: cheerio.CheerioAPI, $row: cheerio.Cheerio<Element>): ParsedSenateBill | null {
   // Extract bill number from row
   const billText = $row.find('a, .bill-number, td:first-child').first().text().trim();
   const match = billText.match(/(S[A-Z]*)\s*(\d+)/);
@@ -544,7 +544,7 @@ function parseActionsPage($: cheerio.CheerioAPI, billId: string): ParsedAction[]
 
 function parseSenatorElement(
   $: cheerio.CheerioAPI,
-  $element: cheerio.Cheerio<cheerio.Element>
+  $element: cheerio.Cheerio<Element>
 ): ParsedSenator | null {
   const district = $element.attr('data-district') ||
     $element.find('.district').text().replace(/\D/g, '') ||
@@ -579,7 +579,7 @@ function parseSenatorElement(
 
 function parseSenatorTableRow(
   $: cheerio.CheerioAPI,
-  $row: cheerio.Cheerio<cheerio.Element>
+  $row: cheerio.Cheerio<Element>
 ): ParsedSenator | null {
   const cells = $row.find('td');
   if (cells.length < 3) return null;
@@ -611,7 +611,7 @@ function parseSenatorTableRow(
 
 function parseCommitteeElement(
   $: cheerio.CheerioAPI,
-  $element: cheerio.Cheerio<cheerio.Element>
+  $element: cheerio.Cheerio<Element>
 ): ParsedSenateCommittee | null {
   const name = $element.find('.committee-name, h3, h4, a').first().text().trim();
   if (!name) return null;
