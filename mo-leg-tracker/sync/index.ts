@@ -239,6 +239,7 @@ async function syncHouseBills(
     const bills = await fetchBillList();
     stats.houseBills.total = bills.length;
 
+    let processed = 0;
     for (const bill of bills) {
       try {
         // Check if bill needs update
@@ -253,6 +254,11 @@ async function syncHouseBills(
           }
           await processBill(db, detailedBill, stats.houseBills);
         }
+        processed++;
+        // Log progress every 50 bills
+        if (processed % 50 === 0) {
+          logger.info(`House bills progress: ${processed}/${bills.length}`);
+        }
       } catch (error) {
         stats.houseBills.failed++;
         logger.error(`Failed to process House bill ${bill.billNumber}`, {
@@ -260,6 +266,7 @@ async function syncHouseBills(
         });
       }
     }
+    logger.info(`House bills complete: ${processed}/${bills.length}`);
   } catch (error) {
     logger.error('Failed to sync House bills', { error: (error as Error).message });
     throw error;

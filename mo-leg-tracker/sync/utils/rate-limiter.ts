@@ -55,7 +55,13 @@ export class RateLimiter {
     if (this.processing) return;
     this.processing = true;
 
-    while (this.queue.length > 0 && this.activeRequests < this.config.maxConcurrent) {
+    while (this.queue.length > 0) {
+      // Wait if we've hit the concurrency limit
+      if (this.activeRequests >= this.config.maxConcurrent) {
+        await this.sleep(50);
+        continue;
+      }
+
       const now = Date.now();
       const timeSinceLastRequest = now - this.lastRequestTime;
 
@@ -70,6 +76,7 @@ export class RateLimiter {
       this.activeRequests++;
       this.lastRequestTime = Date.now();
 
+      // Execute without awaiting to allow concurrency
       this.executeRequest(request);
     }
 

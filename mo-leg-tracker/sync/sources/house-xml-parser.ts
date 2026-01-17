@@ -85,24 +85,49 @@ interface RawHouseAction {
   Link?: string;
 }
 
-interface RawHouseMember {
-  District?: number;
-  FirstName?: string;
-  LastName?: string;
-  Party?: string;
-  Title?: string;
-  Email?: string;
-  Phone?: string;
-  PhotoURL?: string;
+// Member list entry (from 261-MemberList.XML)
+interface RawMemberListEntry {
+  RepresentativeDistrict?: string;
+  RepresentativeXMLLink?: string;
+  LastTimeRun?: string;
 }
 
+// Individual member detail (from 261-001.xml)
+interface RawMemberDetail {
+  ROOT?: {
+    RepresentativeData?: {
+      RepresentativeInfo?: {
+        PhotoLink?: string;
+        LastName?: string;
+        FirstName?: string;
+        DistrictNum?: string;
+        Party?: string;
+        YearElected?: string;
+        Hometown?: string;
+        PhoneNumber?: string;
+        EmailAddress?: string;
+        CapitolAddress?: string;
+        Biography?: string;
+      };
+    };
+  };
+}
+
+// Committee from 261-CommitteeList.XML
 interface RawHouseCommittee {
-  Code?: string;
-  Name?: string;
+  ID?: string;
   Type?: string;
-  Chair?: string;
-  ViceChair?: string;
-  Room?: string;
+  Name?: string;
+  CommitteeMembers?: {
+    CommitteeMember?: RawCommitteeMember | RawCommitteeMember[];
+  };
+}
+
+interface RawCommitteeMember {
+  MemberName?: string;
+  MemberDistrict?: string;
+  PositionName?: string;
+  Chamber?: string;
 }
 
 interface RawHouseHearing {
@@ -307,7 +332,7 @@ export async function fetchBillDetail(prefix: string, number: number): Promise<P
 }
 
 /**
- * Parse the member list feed
+ * Parse the member list feed - fetches list of districts then individual member XMLs
  */
 export async function fetchMemberList(): Promise<ParsedMember[]> {
   const url = buildHouseUrl(config.house.feeds.memberList, {
@@ -318,16 +343,48 @@ export async function fetchMemberList(): Promise<ParsedMember[]> {
   const startTime = Date.now();
 
   try {
-    const data = await fetchXml<{ MemberList?: { Member?: RawHouseMember | RawHouseMember[] } }>(url);
+    // First, get the list of district links
+    const data = await fetchXml<{ ROOT?: { RepresentativeXML?: RawMemberListEntry | RawMemberListEntry[] } }>(url);
 
-    const rawMembers = data.MemberList?.Member;
-    if (!rawMembers) {
+    const rawEntries = data.ROOT?.RepresentativeXML;
+    if (!rawEntries) {
       logger.warn('No members found in feed');
       return [];
     }
 
-    const memberArray = Array.isArray(rawMembers) ? rawMembers : [rawMembers];
-    const members = memberArray.map(parseMember).filter((m): m is ParsedMember => m !== null);
+    const entryArray = Array.isArray(rawEntries) ? rawEntries : [rawEntries];
+    const members: ParsedMember[] = [];
+
+    // Fetch each member's detail XML
+    for (const entry of entryArray) {
+      if (!entry.RepresentativeXMLLink) continue;
+
+      try {
+        const memberData = await fetchXml<RawMemberDetail>(entry.RepresentativeXMLLink);
+        const info = memberData.ROOT?.RepresentativeData?.RepresentativeInfo;
+
+        if (info?.DistrictNum && info?.LastName) {
+          const district = String(info.DistrictNum).padStart(3, '0');
+          members.push({
+            id: generateMemberId('house', district),
+            chamber: 'house',
+            district,
+            firstName: info.FirstName?.trim() || '',
+            lastName: info.LastName.trim(),
+            fullName: `${info.FirstName?.trim() || ''} ${info.LastName.trim()}`.trim(),
+            party: (info.Party?.charAt(0).toUpperCase() as 'R' | 'D' | 'I') || 'I',
+            title: 'Representative',
+            email: info.EmailAddress || null,
+            phone: info.PhoneNumber || null,
+            photoUrl: info.PhotoLink || null,
+          });
+        }
+      } catch (error) {
+        logger.error(`Failed to fetch member detail: ${entry.RepresentativeDistrict}`, {
+          error: (error as Error).message,
+        });
+      }
+    }
 
     logger.syncComplete('fetch member list', { total: members.length }, Date.now() - startTime);
 
@@ -350,9 +407,9 @@ export async function fetchCommitteeList(): Promise<ParsedCommittee[]> {
   const startTime = Date.now();
 
   try {
-    const data = await fetchXml<{ CommitteeList?: { Committee?: RawHouseCommittee | RawHouseCommittee[] } }>(url);
+    const data = await fetchXml<{ ROOT?: { Committee?: RawHouseCommittee | RawHouseCommittee[] } }>(url);
 
-    const rawCommittees = data.CommitteeList?.Committee;
+    const rawCommittees = data.ROOT?.Committee;
     if (!rawCommittees) {
       logger.warn('No committees found in feed');
       return [];
@@ -544,27 +601,6 @@ function parseAction(raw: RawHouseAction, billId: string, sequence: number): Par
   };
 }
 
-function parseMember(raw: RawHouseMember): ParsedMember | null {
-  if (!raw.District || !raw.LastName) {
-    return null;
-  }
-
-  const district = String(raw.District).padStart(3, '0');
-
-  return {
-    id: generateMemberId('house', district),
-    chamber: 'house',
-    district,
-    firstName: raw.FirstName?.trim() || '',
-    lastName: raw.LastName.trim(),
-    fullName: `${raw.FirstName?.trim() || ''} ${raw.LastName.trim()}`.trim(),
-    party: (raw.Party as 'R' | 'D' | 'I') || 'I',
-    title: raw.Title || null,
-    email: raw.Email || null,
-    phone: raw.Phone || null,
-    photoUrl: raw.PhotoURL || null,
-  };
-}
 
 function parseCommittee(raw: RawHouseCommittee): ParsedCommittee | null {
   if (!raw.Name) {
@@ -573,15 +609,37 @@ function parseCommittee(raw: RawHouseCommittee): ParsedCommittee | null {
 
   const name = raw.Name.trim();
 
+  // Find chair and vice-chair from members
+  let chairId: string | null = null;
+  let viceChairId: string | null = null;
+
+  if (raw.CommitteeMembers?.CommitteeMember) {
+    const members = Array.isArray(raw.CommitteeMembers.CommitteeMember)
+      ? raw.CommitteeMembers.CommitteeMember
+      : [raw.CommitteeMembers.CommitteeMember];
+
+    for (const member of members) {
+      if (member.MemberDistrict) {
+        const district = String(member.MemberDistrict).padStart(3, '0');
+        const memberId = generateMemberId('house', district);
+        if (member.PositionName === 'Chair') {
+          chairId = memberId;
+        } else if (member.PositionName === 'Vice-Chair') {
+          viceChairId = memberId;
+        }
+      }
+    }
+  }
+
   return {
     id: generateCommitteeId('house', name),
     chamber: 'house',
     name,
-    shortName: raw.Code?.trim() || abbreviate(name),
+    shortName: raw.ID || abbreviate(name),
     type: mapCommitteeType(raw.Type),
-    chairId: raw.Chair ? `member:unknown:${raw.Chair.toLowerCase().replace(/\s+/g, '_')}` : null,
-    viceChairId: raw.ViceChair ? `member:unknown:${raw.ViceChair.toLowerCase().replace(/\s+/g, '_')}` : null,
-    meetingRoom: raw.Room || null,
+    chairId,
+    viceChairId,
+    meetingRoom: null,
   };
 }
 
