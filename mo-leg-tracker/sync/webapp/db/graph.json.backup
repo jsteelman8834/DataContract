@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "schema": "./schema.json",
+    "created": "2026-01-16T17:40:04.272Z",
+    "updated": "2026-01-16T17:40:08.399Z",
+    "session": "261",
+    "description": "Missouri Legislative Graph Database",
+    "syncState": {
+      "lastFullSync": null,
+      "lastIncrementalSync": null,
+      "lastSyncDuration": 0,
+      "totalBills": 3,
+      "totalMembers": 0,
+      "totalActions": 0
+    }
+  },
+  "nodes": {
+    "sessions": {},
+    "bills": {
+      "bill:sb1:261": {
+        "billNumber": "SB 1",
+        "billPrefix": "SB",
+        "billSuffix": 1,
+        "session": "261",
+        "chamber": "senate",
+        "title": "",
+        "briefDescription": "",
+        "lrNumber": "",
+        "currentStatus": "introduced",
+        "currentCommittee": null,
+        "effectiveDate": null,
+        "introducedDate": null,
+        "lastActionDate": null,
+        "withdrawn": false,
+        "senateBillId": "",
+        "id": "bill:sb1:261",
+        "createdAt": "2026-01-16T17:40:04.891Z",
+        "updatedAt": "2026-01-16T17:40:04.891Z"
+      },
+      "bill:sb2:261": {
+        "billNumber": "SB 2",
+        "billPrefix": "SB",
+        "billSuffix": 2,
+        "session": "261",
+        "chamber": "senate",
+        "title": "",
+        "briefDescription": "",
+        "lrNumber": "",
+        "currentStatus": "introduced",
+        "currentCommittee": null,
+        "effectiveDate": null,
+        "introducedDate": null,
+        "lastActionDate": null,
+        "withdrawn": false,
+        "senateBillId": "",
+        "id": "bill:sb2:261",
+        "createdAt": "2026-01-16T17:40:06.365Z",
+        "updatedAt": "2026-01-16T17:40:06.365Z"
+      },
+      "bill:sb3:261": {
+        "billNumber": "SB 3",
+        "billPrefix": "SB",
+        "billSuffix": 3,
+        "session": "261",
+        "chamber": "senate",
+        "title": "",
+        "briefDescription": "",
+        "lrNumber": "",
+        "currentStatus": "introduced",
+        "currentCommittee": null,
+        "effectiveDate": null,
+        "introducedDate": null,
+        "lastActionDate": null,
+        "withdrawn": false,
+        "senateBillId": "",
+        "id": "bill:sb3:261",
+        "createdAt": "2026-01-16T17:40:08.399Z",
+        "updatedAt": "2026-01-16T17:40:08.399Z"
+      }
+    },
+    "bill_versions": {},
+    "amendments": {},
+    "fiscal_notes": {},
+    "summaries": {},
+    "actions": {},
+    "votes": {},
+    "members": {},
+    "committees": {},
+    "hearings": {},
+    "testimony": {}
+  },
+  "edges": {
+    "SPONSORED_BY": [],
+    "CO_SPONSORED_BY": [],
+    "HAS_VERSION": [],
+    "SUPERSEDES": [],
+    "AMENDS": [],
+    "PROPOSED_BY": [],
+    "ASSIGNED_TO": [],
+    "SCHEDULED_FOR": [],
+    "HAS_ACTION": [],
+    "HAS_VOTE": [],
+    "CAST_VOTE": [],
+    "MEMBER_OF": [],
+    "HAS_FISCAL_NOTE": [],
+    "HAS_SUMMARY": [],
+    "HAS_TESTIMONY": [],
+    "TESTIFIED_AT": [],
+    "IN_SESSION": [
+      {
+        "from": "bill:sb1:261",
+        "to": "session:261"
+      },
+      {
+        "from": "bill:sb2:261",
+        "to": "session:261"
+      },
+      {
+        "from": "bill:sb3:261",
+        "to": "session:261"
+      }
+    ],
+    "ORIGINATED_IN": [],
+    "CROSS_CHAMBER": [],
+    "COMBINES": []
+  }
+}

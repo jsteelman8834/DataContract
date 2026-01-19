@@ -45,6 +45,7 @@ export default function BillPage({ params }: BillPageProps) {
   const actions = legislativeData.getActionsForBill(bill.id);
   const summary = legislativeData.getSummaryForBill(bill.id);
   const fiscalNote = legislativeData.getFiscalNoteForBill(bill.id);
+  const billVersions = legislativeData.getBillVersionsForBill(bill.id);
   const passageProbability = getPassageProbability(bill.currentStatus);
   const committee = bill.currentCommittee
     ? legislativeData.getCommitteeById(bill.currentCommittee)
@@ -345,7 +346,11 @@ export default function BillPage({ params }: BillPageProps) {
             </h3>
             <div className="space-y-2">
               <a
-                href={`https://www.${bill.chamber === 'senate' ? 'senate' : 'house'}.mo.gov/billtracking/${bill.billNumber.replace(' ', '')}`}
+                href={
+                  bill.chamber === 'senate'
+                    ? `https://www.senate.mo.gov/BillTracking/Bills/BillSearch/?BillPrefix=${bill.billPrefix}&BillSuffix=${bill.billSuffix}`
+                    : `https://www.house.mo.gov/Bill.aspx?bill=${bill.billPrefix}${bill.billSuffix}&year=2026&code=R`
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 text-sm text-mo-blue"
@@ -353,13 +358,54 @@ export default function BillPage({ params }: BillPageProps) {
                 Official Bill Page
                 <ExternalLink className="w-4 h-4" />
               </a>
-              <a
-                href="#"
-                className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 text-sm text-mo-blue"
-              >
-                View Full Text (PDF)
-                <ExternalLink className="w-4 h-4" />
-              </a>
+              {billVersions.length > 0 ? (
+                billVersions.map((version) => (
+                  <a
+                    key={version.id}
+                    href={version.pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 text-sm text-mo-blue"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      {version.versionLabel} (PDF)
+                    </span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                ))
+              ) : (
+                <a
+                  href={
+                    bill.chamber === 'senate'
+                      ? `https://www.senate.mo.gov/26info/pdf-bill/intro/${bill.billPrefix}${bill.billSuffix}.pdf`
+                      : `https://documents.house.mo.gov/billtracking/bills261/hlrbillspdf/${bill.lrNumber}.pdf`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 text-sm text-mo-blue"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    View Full Text (PDF)
+                  </span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+              {fiscalNote?.pdfUrl && (
+                <a
+                  href={fiscalNote.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 text-sm text-mo-blue"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Fiscal Note
+                  </span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </div>
           </section>
         </div>

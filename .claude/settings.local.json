@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(curl:*)",
+      "Bash(npm run sync:full:*)",
+      "Bash(npm run sync:status:*)",
+      "Bash(node -e:*)",
+      "Bash(npm run sync:bill:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix House committee and member XML parsing\n\n- Update committee parser to handle ROOT.Committee structure\n- Parse committee members to extract Chair and Vice-Chair\n- Update member parser to fetch individual district XML files\n- Fix RawMemberDetail interface to handle ROOT wrapper\n- Fix type coercion for district numbers \\(String\\(\\).padStart\\)\n- Fix rate limiter to properly wait for concurrent request slots\n- Add progress logging for House bill sync\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nSync House legislative data: committees, members, and bills\n\nDatabase now contains:\n- 65 committees \\(62 House committees with chair/vice-chair\\)\n- 160 members \\(158 House representatives with contact info\\)\n- 2,285 bills \\(1,485 House + 795 Senate\\)\n- 8,775 legislative actions\n\nData synced from official Missouri House XML feeds:\n- https://documents.house.mo.gov/xml/261-CommitteeList.XML\n- https://documents.house.mo.gov/xml/261-MemberList.XML\n- https://documents.house.mo.gov/xml/261-BillList.XML\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "WebFetch(domain:www.senate.mo.gov)",
+      "Bash(npm run sync:incremental:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
