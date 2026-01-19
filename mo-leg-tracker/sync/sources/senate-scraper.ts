@@ -106,6 +106,7 @@ async function fetchHtml(url: string): Promise<cheerio.CheerioAPI> {
         'Accept': 'text/html,application/xhtml+xml',
         'User-Agent': 'MO-Leg-Tracker/1.0 (sync)',
       },
+      redirect: 'follow',
     });
 
     if (!response.ok) {
@@ -670,55 +671,123 @@ function parseBillDetailPage(
 ): ParsedSenateBill | null {
   const id = generateBillId(prefix, number, config.session.code);
 
-  // Extract title
-  const title = $('.bill-title, #billTitle, h1, h2').first().text().trim()
-    .replace(new RegExp(`^${prefix}\\s*${number}\\s*[-–]?\\s*`, 'i'), '');
+  // Senate BTS Web uses span/anchor elements with specific IDs
+  // Extract directly using those IDs for reliable parsing
 
-  // Extract sponsor
-  const sponsorText = $('label:contains("Sponsor"), th:contains("Sponsor")').next().text().trim() ||
-    $('.sponsor-name').text().trim();
+  // Get text from element by ID, handling nested font tags
+  function getById(elementId: string): string {
+    const el = $(`#${elementId}`);
+    return el.length ? el.text().trim() : '';
+  }
+
+  // Get href from anchor by ID
+  function getHrefById(elementId: string): string {
+    const el = $(`#${elementId}`);
+    return el.length ? (el.attr('href') || '') : '';
+  }
+
+  // Extract title/description - Senate uses lblBriefDesc for main description
+  let title = getById('lblBriefDesc');
+
+  // If no brief desc, try the formal title
+  if (!title) {
+    title = getById('lblBillTitle');
+  }
+
+  // Extract sponsor - uses anchor with id hlSponsor
+  // Format may be "Name", "Name (X)", or "Name (District X)"
+  const sponsorText = getById('hlSponsor');
   let sponsor: ParsedSponsor | null = null;
-  if (sponsorText) {
-    const match = sponsorText.match(/(.+?)(?:\s*\(District\s*(\d+)\))?$/i);
+  if (sponsorText && sponsorText.length > 1) {
+    // Try to extract district from text like "Justin Brown (16)" or "Name (District 16)"
+    const districtMatch = sponsorText.match(/\(\s*(?:District\s*)?(\d+)\s*\)/i);
+    const district = districtMatch ? districtMatch[1] : null;
+    const name = sponsorText
+      .replace(/\s*\(\s*(?:District\s*)?\d+\s*\)/i, '')
+      .replace(/Senator\s*/i, '')
+      .trim();
     sponsor = {
-      memberId: match?.[2] ? generateMemberId('senate', match[2]) : '',
-      name: match?.[1]?.trim() || sponsorText,
-      district: match?.[2] || null,
+      memberId: district ? generateMemberId('senate', district.padStart(2, '0')) : '',
+      name,
+      district,
     };
   }
 
   // Extract co-sponsors
   const coSponsors: ParsedSponsor[] = [];
-  $('label:contains("Co-Sponsor"), th:contains("Co-Sponsor")').next().find('a, span').each((_, el) => {
-    const name = $(el).text().trim();
-    if (name) {
-      coSponsors.push({
-        memberId: '',
-        name,
-        district: null,
-      });
+  const coSponsorText = getById('hlCoSponsors');
+  if (coSponsorText) {
+    const names = coSponsorText.split(/[,;]/);
+    for (const name of names) {
+      const cleanName = name.replace(/Senator\s*/i, '').trim();
+      if (cleanName && cleanName.length > 1) {
+        coSponsors.push({
+          memberId: '',
+          name: cleanName,
+          district: null,
+        });
+      }
     }
-  });
+  }
 
-  // Extract status
-  const statusText = $('label:contains("Status"), th:contains("Status")').next().text().trim() ||
-    $('.bill-status').text().trim();
+  // Extract status/last action - uses lblLastAction
+  // Format: "1/8/2026 - Second Read and Referred S Appropriations Committee"
+  const statusText = getById('lblLastAction');
 
-  // Extract LR Number
-  const lrNumber = $('label:contains("LR"), th:contains("LR")').next().text().trim() ||
-    $('[data-lr-number]').attr('data-lr-number') || '';
+  // Parse last action date from status text
+  let lastActionDate: string | null = null;
+  const dateMatch = statusText.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+  if (dateMatch) {
+    const [month, day, year] = dateMatch[1].split('/');
+    lastActionDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
 
-  // Extract committee
-  const committeeText = $('label:contains("Committee"), th:contains("Committee")').next().text().trim();
+  // Extract LR Number - uses lblLRNum
+  const lrNumber = getById('lblLRNum');
+
+  // Extract committee - uses anchor hlCommittee
+  const committeeText = getById('hlCommittee');
   const currentCommittee = committeeText ? generateCommitteeId('senate', committeeText) : null;
 
-  // Extract effective date
-  const effectiveDateText = $('label:contains("Effective"), th:contains("Effective")').next().text().trim();
+  // Extract effective date - uses lblEffDate
+  const effectiveDateText = getById('lblEffDate');
   const effectiveDate = parseDate(effectiveDateText);
 
   // Extract BillID for actions lookup
-  const billIdMatch = $('input[name="BillID"], [data-bill-id]').attr('value') ||
-    $('a[href*="BillID="]').attr('href')?.match(/BillID=(\d+)/)?.[1] || '';
+  // Try from form action first
+  let senateBillId = '';
+  const formAction = $('form#form1').attr('action') || '';
+  const formMatch = formAction.match(/BillID=(\d+)/i);
+  if (formMatch) {
+    senateBillId = formMatch[1];
+  }
+  // If not found, try from links
+  if (!senateBillId) {
+    $('a[href*="BillID="]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const match = href.match(/BillID=(\d+)/i);
+      if (match) {
+        senateBillId = match[1];
+        return false;
+      }
+      return undefined;
+    });
+  }
+
+  // Get summary/description from lblSummary
+  let briefDescription = title;
+  const summaryText = getById('lblSummary');
+  if (summaryText && summaryText.length > 20) {
+    // Remove the "SB X - " prefix if present
+    briefDescription = summaryText
+      .replace(new RegExp(`^${prefix}\\s*${number}\\s*[-–]\\s*`, 'i'), '')
+      .trim()
+      .substring(0, 500);
+    // If we don't have a title yet, use start of summary
+    if (!title) {
+      title = briefDescription.substring(0, 200);
+    }
+  }
 
   return {
     id,
@@ -728,18 +797,18 @@ function parseBillDetailPage(
     session: config.session.code,
     chamber: 'senate',
     title,
-    briefDescription: title,
+    briefDescription,
     lrNumber,
     currentStatus: mapStatusFromText(statusText),
     currentCommittee,
     effectiveDate,
     introducedDate: null,
-    lastActionDate: null,
+    lastActionDate,
     withdrawn: statusText.toLowerCase().includes('withdrawn'),
     sponsor,
     coSponsors,
     actions: [],
-    senateBillId: billIdMatch,
+    senateBillId,
   };
 }
 

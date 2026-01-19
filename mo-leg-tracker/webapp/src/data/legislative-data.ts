@@ -67,7 +67,17 @@ class LegislativeDataService {
   }
 
   getBillsByCommittee(committeeId: string): Bill[] {
-    return this.getAllBills().filter((bill) => bill.currentCommittee === committeeId);
+    // Get bills assigned to this committee via ASSIGNED_TO edges
+    const assignedBillIds = new Set(
+      (this.data.edges.ASSIGNED_TO || [])
+        .filter((edge) => edge.to === committeeId)
+        .map((edge) => edge.from)
+    );
+
+    // Also include bills that have currentCommittee set (legacy/fallback)
+    return this.getAllBills().filter(
+      (bill) => assignedBillIds.has(bill.id) || bill.currentCommittee === committeeId
+    );
   }
 
   // Members
@@ -165,15 +175,18 @@ class LegislativeDataService {
       .map((e) => {
         const member = this.getMemberById(e.from);
         if (!member) return null;
+        // Edge properties store 'position', map to 'role' for UI
+        const props = e.properties as { position?: string; role?: string } | undefined;
+        const role = props?.position || props?.role || 'member';
         return {
           ...member,
-          role: (e.properties as CommitteeMembershipEdge).role,
+          role: role as 'chair' | 'vice_chair' | 'ranking_member' | 'member',
         };
       })
       .filter((m): m is MemberWithRole => m !== null)
       .sort((a, b) => {
-        const roleOrder = { chair: 0, vice_chair: 1, ranking_member: 2, member: 3 };
-        return roleOrder[a.role] - roleOrder[b.role];
+        const roleOrder = { chair: 0, vice_chair: 1, ranking_member: 2, ranking_minority: 2, member: 3 };
+        return (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3);
       });
   }
 
@@ -183,9 +196,10 @@ class LegislativeDataService {
     for (const e of edges) {
       const committee = this.getCommitteeById(e.to);
       if (committee) {
+        const props = e.properties as { position?: string; role?: string } | undefined;
         results.push({
           committee,
-          role: (e.properties as CommitteeMembershipEdge).role,
+          role: props?.position || props?.role || 'member',
         });
       }
     }
@@ -266,6 +280,157 @@ class LegislativeDataService {
       }))
       .filter(({ fiscalNote }) => Math.abs(fiscalNote.netImpact) >= threshold)
       .sort((a, b) => Math.abs(b.weightedImpact) - Math.abs(a.weightedImpact));
+  }
+
+  // Bills to Watch - progressing bills with fiscal significance
+  // Statuses indicating a bill has moved past committee
+  private static PROGRESSING_STATUSES = [
+    'reported_do_pass',
+    'placed_on_calendar',
+    'perfected',
+    'third_read',
+    'passed_origin',
+    'passed_chamber',
+    'received_other',
+    'referred_other',
+    'passed_other',
+    'passed_second_chamber',
+    'conference',
+    'truly_agreed',
+    'sent_to_governor',
+    'signed',
+    'enacted',
+    'vetoed',
+    'veto_overridden',
+  ];
+
+  // Statuses worth watching (showing movement but not past committee yet)
+  private static WATCH_STATUSES = [
+    'hearing_scheduled',
+    'hearing_held',
+    'committee_substitute',
+  ];
+
+  /**
+   * Get bills that are actively progressing (past committee stage)
+   */
+  getProgressingBills(): Bill[] {
+    return this.getAllBills().filter((bill) =>
+      LegislativeDataService.PROGRESSING_STATUSES.includes(bill.currentStatus)
+    );
+  }
+
+  /**
+   * Get bills worth watching (showing movement in committee)
+   */
+  getWatchBills(): Bill[] {
+    const watchStatuses = [
+      ...LegislativeDataService.WATCH_STATUSES,
+      ...LegislativeDataService.PROGRESSING_STATUSES,
+    ];
+    return this.getAllBills().filter((bill) =>
+      watchStatuses.includes(bill.currentStatus)
+    );
+  }
+
+  /**
+   * Get bills to watch with full context - progressing bills with fiscal notes
+   */
+  getBillsToWatch(): Array<{
+    bill: Bill;
+    sponsor: Member | null;
+    fiscalNote: FiscalNote | null;
+    passageProbability: number;
+    weightedFiscalImpact: number;
+    daysSinceLastAction: number;
+  }> {
+    const progressingBills = this.getProgressingBills();
+
+    return progressingBills
+      .map((bill) => {
+        const sponsor = this.getSponsorForBill(bill.id);
+        const fiscalNote = this.getFiscalNoteForBill(bill.id);
+        const passageProbability = getPassageProbability(bill.currentStatus);
+        const weightedFiscalImpact = fiscalNote
+          ? calculateWeightedImpact(fiscalNote.netImpact, passageProbability)
+          : 0;
+
+        const daysSinceLastAction = bill.lastActionDate
+          ? Math.ceil(
+              (Date.now() - new Date(bill.lastActionDate).getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          : 0;
+
+        return {
+          bill,
+          sponsor,
+          fiscalNote,
+          passageProbability,
+          weightedFiscalImpact,
+          daysSinceLastAction,
+        };
+      })
+      .sort((a, b) => {
+        // Sort by passage probability (highest first), then by fiscal impact
+        if (b.passageProbability !== a.passageProbability) {
+          return b.passageProbability - a.passageProbability;
+        }
+        return Math.abs(b.weightedFiscalImpact) - Math.abs(a.weightedFiscalImpact);
+      });
+  }
+
+  /**
+   * Get bills with recent activity (last 7 days) that are progressing
+   */
+  getRecentlyActiveBills(days: number = 7): Bill[] {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+    return this.getAllBills()
+      .filter((bill) => bill.lastActionDate && bill.lastActionDate >= cutoffStr)
+      .sort((a, b) => (b.lastActionDate || '').localeCompare(a.lastActionDate || ''));
+  }
+
+  /**
+   * Get summary stats for bills to watch
+   */
+  getBillsToWatchSummary(): {
+    totalProgressing: number;
+    withFiscalNotes: number;
+    byChamber: { house: number; senate: number };
+    byStatus: Record<string, number>;
+    totalFiscalImpact: number;
+    weightedFiscalImpact: number;
+  } {
+    const billsToWatch = this.getBillsToWatch();
+
+    const byChamber = { house: 0, senate: 0 };
+    const byStatus: Record<string, number> = {};
+    let totalFiscalImpact = 0;
+    let weightedFiscalImpact = 0;
+    let withFiscalNotes = 0;
+
+    for (const { bill, fiscalNote, weightedFiscalImpact: weighted } of billsToWatch) {
+      byChamber[bill.chamber as 'house' | 'senate']++;
+      byStatus[bill.currentStatus] = (byStatus[bill.currentStatus] || 0) + 1;
+
+      if (fiscalNote) {
+        withFiscalNotes++;
+        totalFiscalImpact += fiscalNote.netImpact;
+        weightedFiscalImpact += weighted;
+      }
+    }
+
+    return {
+      totalProgressing: billsToWatch.length,
+      withFiscalNotes,
+      byChamber,
+      byStatus,
+      totalFiscalImpact,
+      weightedFiscalImpact,
+    };
   }
 
   // Computed data for UI

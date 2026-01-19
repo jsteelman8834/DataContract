@@ -37,6 +37,19 @@ export function CommitteeCard({ committeeData, defaultExpanded = false }: Commit
   }, {} as Record<string, BillCardType[]>);
 
   const chair = members.find((m) => m.role === 'chair');
+  const viceChair = members.find((m) => m.role === 'vice_chair');
+
+  // Sort statuses in logical order for display
+  const statusOrder = [
+    'prefiled', 'introduced', 'first_read', 'referred', 'in_committee',
+    'hearing_scheduled', 'reported_do_pass', 'perfected', 'third_read',
+    'passed_origin', 'passed_other', 'truly_agreed', 'signed', 'enacted', 'vetoed', 'withdrawn'
+  ];
+  const sortedStatuses = Object.entries(billsByStatus).sort(([a], [b]) => {
+    const aIndex = statusOrder.indexOf(a);
+    const bIndex = statusOrder.indexOf(b);
+    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+  });
 
   return (
     <div className={cn(
@@ -64,16 +77,36 @@ export function CommitteeCard({ committeeData, defaultExpanded = false }: Commit
             <h3 className="font-semibold text-lg text-gray-900">
               {committee.name}
             </h3>
-            {chair && (
-              <p className="text-sm text-gray-600 mt-1 flex items-center">
+
+            {/* Leadership and Members info */}
+            <div className="mt-2 space-y-1">
+              {(chair || viceChair) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                  {chair && (
+                    <span className="flex items-center">
+                      <span className="font-medium mr-1">Chair:</span>
+                      <span className={cn('px-1 rounded mr-1 text-xs', getPartyColor(chair.party))}>
+                        {chair.party}
+                      </span>
+                      {chair.fullName}
+                    </span>
+                  )}
+                  {viceChair && (
+                    <span className="flex items-center">
+                      <span className="font-medium mr-1">Vice Chair:</span>
+                      <span className={cn('px-1 rounded mr-1 text-xs', getPartyColor(viceChair.party))}>
+                        {viceChair.party}
+                      </span>
+                      {viceChair.fullName}
+                    </span>
+                  )}
+                </div>
+              )}
+              <p className="text-sm text-gray-500 flex items-center">
                 <Users className="w-4 h-4 mr-1" />
-                Chair:
-                <span className={cn('px-1 rounded mx-1 text-xs', getPartyColor(chair.party))}>
-                  {chair.party}
-                </span>
-                {chair.fullName}
+                {members.length} member{members.length !== 1 ? 's' : ''} assigned
               </p>
-            )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -96,10 +129,19 @@ export function CommitteeCard({ committeeData, defaultExpanded = false }: Commit
               {upcomingHearings.length} upcoming hearing{upcomingHearings.length !== 1 ? 's' : ''}
             </span>
           )}
-          <span className="flex items-center text-gray-500">
-            <MapPin className="w-4 h-4 mr-1" />
-            {committee.meetingRoom}
-          </span>
+          {committee.meetingRoom && (
+            <span className="flex items-center text-gray-500">
+              <MapPin className="w-4 h-4 mr-1" />
+              {committee.meetingRoom}
+            </span>
+          )}
+          {/* Show status breakdown */}
+          {bills.length > 0 && (
+            <span className="flex items-center gap-1 text-gray-500">
+              <FileText className="w-4 h-4" />
+              {Object.keys(billsByStatus).length} stage{Object.keys(billsByStatus).length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       </div>
 
@@ -161,17 +203,17 @@ export function CommitteeCard({ committeeData, defaultExpanded = false }: Commit
             ) : (
               <div className="overflow-x-auto -mx-4 px-4">
                 <div className="flex gap-4 pb-2 min-w-max">
-                  {Object.entries(billsByStatus).map(([status, statusBills]) => (
+                  {sortedStatuses.map(([status, statusBills]) => (
                     <div key={status} className="kanban-column flex-shrink-0 w-72">
                       <div className="kanban-column-header">
                         <h5 className="font-medium text-sm text-gray-700 flex items-center justify-between">
-                          <span>{STATUS_LABELS[status as keyof typeof STATUS_LABELS] || status}</span>
+                          <span>{STATUS_LABELS[status as keyof typeof STATUS_LABELS] || status.replace(/_/g, ' ')}</span>
                           <span className="bg-gray-200 px-2 py-0.5 rounded-full text-xs">
                             {statusBills.length}
                           </span>
                         </h5>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
                         {statusBills.map((billCard) => (
                           <BillCard
                             key={billCard.bill.id}
@@ -208,9 +250,9 @@ export function CommitteeCard({ committeeData, defaultExpanded = false }: Commit
                 >
                   <span className={cn('w-2 h-2 rounded-full mr-2', getPartyColor(member.party))} />
                   {member.lastName}
-                  {member.role !== 'member' && (
+                  {member.role && member.role !== 'member' && (
                     <span className="ml-1 text-xs text-gray-500">
-                      ({member.role.replace('_', ' ')})
+                      ({member.role.replace(/_/g, ' ')})
                     </span>
                   )}
                 </Link>
