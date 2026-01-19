@@ -4,11 +4,12 @@ import { useState, useMemo } from 'react';
 import legislativeData from '@/data/legislative-data';
 import { CommitteeCard } from '@/components/committees/CommitteeCard';
 import { cn } from '@/lib/utils';
-import { Building2, Filter } from 'lucide-react';
+import { Building2, Filter, Calendar } from 'lucide-react';
 
 export default function CommitteesPage() {
   const [chamberFilter, setChamberFilter] = useState<'all' | 'house' | 'senate'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'standing' | 'special' | 'joint'>('all');
+  const [showOnlyWithHearings, setShowOnlyWithHearings] = useState(false);
 
   const allCommittees = useMemo(() => {
     return legislativeData
@@ -27,14 +28,29 @@ export default function CommitteesPage() {
       committees = committees.filter((c) => c.committee.type === typeFilter);
     }
 
-    // Sort by number of bills (most active first)
-    committees.sort((a, b) => b.bills.length - a.bills.length);
+    if (showOnlyWithHearings) {
+      committees = committees.filter((c) => c.upcomingHearings.length > 0);
+    }
+
+    // Sort: committees with upcoming hearings first, then by number of bills
+    committees.sort((a, b) => {
+      // First, prioritize committees with upcoming hearings
+      if (a.upcomingHearings.length > 0 && b.upcomingHearings.length === 0) return -1;
+      if (b.upcomingHearings.length > 0 && a.upcomingHearings.length === 0) return 1;
+      // Then sort by number of hearings if both have hearings
+      if (a.upcomingHearings.length !== b.upcomingHearings.length) {
+        return b.upcomingHearings.length - a.upcomingHearings.length;
+      }
+      // Finally sort by number of bills
+      return b.bills.length - a.bills.length;
+    });
 
     return committees;
-  }, [allCommittees, chamberFilter, typeFilter]);
+  }, [allCommittees, chamberFilter, typeFilter, showOnlyWithHearings]);
 
   const senateCount = allCommittees.filter((c) => c.committee.chamber === 'senate').length;
   const houseCount = allCommittees.filter((c) => c.committee.chamber === 'house').length;
+  const withHearingsCount = allCommittees.filter((c) => c.upcomingHearings.length > 0).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -102,6 +118,20 @@ export default function CommitteesPage() {
             <option value="special">Special</option>
             <option value="joint">Joint</option>
           </select>
+
+          {/* Upcoming Hearings Filter */}
+          <button
+            onClick={() => setShowOnlyWithHearings(!showOnlyWithHearings)}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2 transition-colors',
+              showOnlyWithHearings
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            )}
+          >
+            <Calendar className="w-4 h-4" />
+            Upcoming Hearings ({withHearingsCount})
+          </button>
         </div>
       </div>
 

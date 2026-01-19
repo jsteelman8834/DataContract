@@ -348,7 +348,9 @@ export default function BillPage({ params }: BillPageProps) {
               <a
                 href={
                   bill.chamber === 'senate'
-                    ? `https://www.senate.mo.gov/BillTracking/Bills/BillSearch/?BillPrefix=${bill.billPrefix}&BillSuffix=${bill.billSuffix}`
+                    ? bill.senateBillId
+                      ? `https://www.senate.mo.gov/26info/BTS_Web/Bill.aspx?SessionType=R&BillID=${bill.senateBillId}`
+                      : `https://www.senate.mo.gov/BillTracking/Bills/BillSearch/?year=2026&session=R&BillPrefix=${bill.billPrefix}&BillSuffix=${bill.billSuffix}`
                     : `https://www.house.mo.gov/Bill.aspx?bill=${bill.billPrefix}${bill.billSuffix}&year=2026&code=R`
                 }
                 target="_blank"

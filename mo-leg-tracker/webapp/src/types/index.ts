@@ -29,6 +29,7 @@ export interface Bill {
   introducedDate: string;
   lastActionDate: string;
   withdrawn: boolean;
+  senateBillId?: string; // Internal Senate BTS Web ID (for Senate bills only)
   createdAt: string;
   updatedAt: string;
 }

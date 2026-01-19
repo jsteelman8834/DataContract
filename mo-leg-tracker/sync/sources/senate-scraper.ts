@@ -266,8 +266,62 @@ export async function fetchSenateBillActions(
 }
 
 /**
+ * Fetch senator directory data (party, phone, office)
+ * Parses the table at /Senators/Directory
+ * Format: Name | R-## or D-## | Room | Phone
+ */
+async function fetchSenatorDirectory(): Promise<Map<string, { party: 'R' | 'D'; phone: string | null; office: string | null; fullName: string }>> {
+  const directoryUrl = `${config.senate.baseUrl}/Senators/Directory`;
+  logger.debug(`Fetching senator directory: ${directoryUrl}`);
+
+  const directory = new Map<string, { party: 'R' | 'D'; phone: string | null; office: string | null; fullName: string }>();
+
+  try {
+    const $ = await fetchHtml(directoryUrl);
+
+    // Parse table rows - structure: Name, Party/District, (empty), Office, Phone
+    $('table tr').each((_, row) => {
+      const $row = $(row);
+      const cells = $row.find('td');
+
+      if (cells.length < 5) return;
+
+      // Cell 0: Name (may be linked)
+      const nameCell = cells.eq(0);
+      const fullName = nameCell.text().trim();
+
+      // Cell 1: Party-District (e.g., "R-25" or "D-07")
+      const partyDistrictCell = cells.eq(1).text().trim();
+      const partyMatch = partyDistrictCell.match(/^([RD])-(\d+)$/);
+      if (!partyMatch) return;
+
+      const party = partyMatch[1] as 'R' | 'D';
+      const district = partyMatch[2].padStart(2, '0');
+
+      // Cell 2: Empty column (skip)
+      // Cell 3: Office room
+      const office = cells.eq(3).text().trim() || null;
+
+      // Cell 4: Phone
+      const phoneText = cells.eq(4).text().trim();
+      const phone = phoneText.match(/\(\d{3}\)\s*\d{3}-\d{4}/) ? phoneText : null;
+
+      directory.set(district, { party, phone, office, fullName });
+    });
+
+    logger.debug(`Parsed ${directory.size} senators from directory`);
+  } catch (error) {
+    logger.warn('Failed to fetch senator directory', { error: (error as Error).message });
+  }
+
+  return directory;
+}
+
+/**
  * Fetch senator list
- * Parses the senator links from the Senate website
+ * Combines data from:
+ * 1. /Senators/Directory - party affiliation and phone
+ * 2. Member list page - photos and links
  * Updated structure (2026):
  * <a href="/Senators/Member/[DISTRICT]">
  *   <img src="WebPhotos/SenatorPortraits/[NAME][DISTRICT].jpg" alt="Senator [NAME]">
@@ -282,6 +336,9 @@ export async function fetchSenatorList(): Promise<ParsedSenator[]> {
   const startTime = Date.now();
 
   try {
+    // First fetch the directory to get party and phone data
+    const directory = await fetchSenatorDirectory();
+
     const $ = await fetchHtml(url);
     const senators: ParsedSenator[] = [];
     const seenDistricts = new Set<string>();
@@ -350,20 +407,61 @@ export async function fetchSenatorList(): Promise<ParsedSenator[]> {
         }
       }
 
+      // Get party and phone from directory data
+      const directoryData = directory.get(district);
+      const party = directoryData?.party || 'I';
+      const phone = directoryData?.phone || null;
+
+      // Use full name from directory if available (more accurate than just last name)
+      let fullName = `Senator ${lastName}`;
+      let firstName = '';
+      if (directoryData?.fullName) {
+        fullName = directoryData.fullName;
+        // Try to extract first name: "Jason Bean" -> firstName = "Jason"
+        const nameParts = directoryData.fullName.split(/\s+/);
+        if (nameParts.length >= 2) {
+          firstName = nameParts[0];
+          lastName = nameParts[nameParts.length - 1];
+        }
+      }
+
       senators.push({
         id: generateMemberId('senate', district),
         chamber: 'senate',
         district,
-        firstName: '', // Not available on list page
+        firstName,
         lastName,
-        fullName: `Senator ${lastName}`,
-        party: 'I', // Not available on list page, would need detail page
+        fullName,
+        party,
         title: null,
         email: null,
-        phone: null,
+        phone,
         photoUrl,
       });
     });
+
+    // Also add any senators from directory that weren't in the member list
+    for (const [district, data] of directory) {
+      if (!seenDistricts.has(district)) {
+        const nameParts = data.fullName.split(/\s+/);
+        const firstName = nameParts.length >= 2 ? nameParts[0] : '';
+        const lastName = nameParts.length >= 2 ? nameParts[nameParts.length - 1] : data.fullName;
+
+        senators.push({
+          id: generateMemberId('senate', district),
+          chamber: 'senate',
+          district,
+          firstName,
+          lastName,
+          fullName: data.fullName,
+          party: data.party,
+          title: null,
+          email: null,
+          phone: data.phone,
+          photoUrl: null,
+        });
+      }
+    }
 
     logger.syncComplete('fetch Senator list', { total: senators.length }, Date.now() - startTime);
 

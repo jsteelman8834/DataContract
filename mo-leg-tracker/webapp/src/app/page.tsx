@@ -7,6 +7,7 @@ import { ChamberView } from '@/components/dashboard/ChamberView';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { MiniCalendar } from '@/components/calendar/CalendarView';
 import { BillCard } from '@/components/bills/BillCard';
+import { BillsToWatch } from '@/components/dashboard/BillsToWatch';
 import {
   FileText,
   Users,
@@ -15,6 +16,7 @@ import {
   TrendingUp,
   Clock,
   ChevronRight,
+  Eye,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -48,6 +50,15 @@ export default function DashboardPage() {
       today.toISOString().split('T')[0],
       thirtyDaysFromNow.toISOString().split('T')[0]
     );
+  }, []);
+
+  const billsToWatch = useMemo(() => {
+    // Get all watch bills (including those showing movement in committee)
+    return legislativeData.getWatchBills().map((bill) => legislativeData.getBillCard(bill));
+  }, []);
+
+  const recentlyActiveBills = useMemo(() => {
+    return legislativeData.getRecentlyActiveBills(7).slice(0, 10).map((bill) => legislativeData.getBillCard(bill));
   }, []);
 
   return (
@@ -93,6 +104,16 @@ export default function DashboardPage() {
           color="green"
         />
       </div>
+
+      {/* Bills to Watch Section */}
+      {(billsToWatch.length > 0 || recentlyActiveBills.length > 0) && (
+        <div className="mb-8">
+          <BillsToWatch
+            watchBills={billsToWatch}
+            recentlyActiveBills={recentlyActiveBills}
+          />
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
