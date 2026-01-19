@@ -256,6 +256,7 @@ export async function fetchSenateBillActions(
 
 /**
  * Fetch senator list
+ * Parses the .panel-senator cards from the Senate website
  */
 export async function fetchSenatorList(): Promise<ParsedSenator[]> {
   const url = buildSenateUrl(config.senate.members.list, {});
@@ -267,23 +268,57 @@ export async function fetchSenatorList(): Promise<ParsedSenator[]> {
     const $ = await fetchHtml(url);
     const senators: ParsedSenator[] = [];
 
-    // Parse senator cards/rows
-    $('.senator-card, .member-row, [data-district]').each((_, element) => {
-      const senator = parseSenatorElement($, $(element));
-      if (senator) {
-        senators.push(senator);
-      }
-    });
+    // Parse senator panels - structure:
+    // <div class="panel-senator">
+    //   <a href="/Senators/Member/25"><img title="Senator Bean" /></a>
+    //   <div class="senator-Text"><strong>Senator Bean <br />District 25</strong></div>
+    // </div>
+    $('.panel-senator').each((_, element) => {
+      const $panel = $(element);
 
-    // Alternative: Parse from table rows
-    if (senators.length === 0) {
-      $('table tbody tr').each((_, element) => {
-        const senator = parseSenatorTableRow($, $(element));
-        if (senator) {
-          senators.push(senator);
+      // Extract district from the link href
+      const href = $panel.find('a[href*="/Senators/Member/"]').attr('href') || '';
+      const districtMatch = href.match(/\/Senators\/Member\/(\d+)/i);
+      if (!districtMatch) return;
+
+      const district = districtMatch[1].padStart(2, '0');
+
+      // Extract name from img title or from the text
+      const imgTitle = $panel.find('img').attr('title') || '';
+      const textContent = $panel.find('.senator-Text strong').text().trim();
+
+      // Parse name from "Senator LastName" format
+      let lastName = '';
+      const titleMatch = imgTitle.match(/Senator\s+(\w+)/i);
+      if (titleMatch) {
+        lastName = titleMatch[1];
+      } else {
+        // Try from text content: "Senator LastName<br />District XX"
+        const textMatch = textContent.match(/Senator\s+(\w+)/i);
+        if (textMatch) {
+          lastName = textMatch[1];
         }
+      }
+
+      if (!lastName) return;
+
+      // Extract photo URL
+      const photoUrl = $panel.find('img').attr('src') || null;
+
+      senators.push({
+        id: generateMemberId('senate', district),
+        chamber: 'senate',
+        district,
+        firstName: '', // Not available on list page
+        lastName,
+        fullName: `Senator ${lastName}`,
+        party: 'I', // Not available on list page, would need detail page
+        title: null,
+        email: null,
+        phone: null,
+        photoUrl,
       });
-    }
+    });
 
     logger.syncComplete('fetch Senator list', { total: senators.length }, Date.now() - startTime);
 
@@ -294,54 +329,127 @@ export async function fetchSenatorList(): Promise<ParsedSenator[]> {
   }
 }
 
+// Committee group configuration for Senate website
+const COMMITTEE_GROUPS: { groupId: number; type: 'standing' | 'special' | 'select' | 'joint' }[] = [
+  { groupId: 1, type: 'standing' },    // Standing Committees
+  { groupId: 2, type: 'standing' },    // Statutory Committees
+  { groupId: 5, type: 'select' },      // Select Committees
+  { groupId: 8, type: 'special' },     // Task Forces
+];
+
 /**
- * Fetch committee list
+ * Fetch committee list from all committee groups
+ * The Senate website organizes committees by type in separate pages
  */
 export async function fetchSenateCommitteeList(): Promise<ParsedSenateCommittee[]> {
-  const url = buildSenateUrl(config.senate.committees.list, {});
+  const baseUrl = config.senate.baseUrl;
 
-  logger.syncStart('fetch Senate committee list', { url });
+  logger.syncStart('fetch Senate committee list', { url: `${baseUrl}/Committees/` });
   const startTime = Date.now();
 
   try {
-    const $ = await fetchHtml(url);
     const committees: ParsedSenateCommittee[] = [];
 
-    // Parse committee entries
-    $('.committee-item, .committee-card, [data-committee-id]').each((_, element) => {
-      const committee = parseCommitteeElement($, $(element));
-      if (committee) {
-        committees.push(committee);
-      }
-    });
+    // Fetch each committee group page
+    for (const group of COMMITTEE_GROUPS) {
+      const groupUrl = `${baseUrl}/Committees/CommitteeGroup/${group.groupId}`;
+      logger.debug(`Fetching committee group: ${groupUrl}`);
 
-    // Alternative: Parse from links
-    if (committees.length === 0) {
-      $('a[href*="CommitteeDetails"]').each((_, element) => {
-        const name = $(element).text().trim();
-        if (name && !name.includes('http')) {
+      try {
+        const $ = await fetchHtml(groupUrl);
+
+        // Parse committee links from the group page
+        // Structure: <p><a href="/Committees/CommitteeDetails/1">Administration</a></p>
+        $('a[href*="/Committees/CommitteeDetails/"]').each((_, element) => {
+          const $link = $(element);
+          const name = $link.text().trim();
+          const href = $link.attr('href') || '';
+
+          // Skip if it looks like a utility link or is empty
+          if (!name || name.includes('http') || name.includes('Assigned') || name.includes('Minutes')) {
+            return;
+          }
+
+          // Extract committee ID from URL for potential detail fetching
+          const detailIdMatch = href.match(/\/CommitteeDetails\/(\d+)/i);
+          const senateCommitteeId = detailIdMatch ? detailIdMatch[1] : '';
+
           const id = generateCommitteeId('senate', name);
+
+          // Avoid duplicates
           if (!committees.find(c => c.id === id)) {
             committees.push({
               id,
               chamber: 'senate',
               name,
               shortName: abbreviate(name),
-              type: categorizeCommittee(name),
+              type: group.type,
               chairId: null,
               viceChairId: null,
-            });
+              // Store internal ID for later detail fetching if needed
+              ...(senateCommitteeId && { _senateCommitteeId: senateCommitteeId }),
+            } as ParsedSenateCommittee);
           }
-        }
-      });
+        });
+      } catch (groupError) {
+        logger.warn(`Failed to fetch committee group ${group.groupId}`, {
+          error: (groupError as Error).message,
+        });
+        // Continue with other groups
+      }
     }
 
     logger.syncComplete('fetch Senate committee list', { total: committees.length }, Date.now() - startTime);
 
     return committees;
   } catch (error) {
-    logger.syncFailed('fetch Senate committee list', error as Error, { url });
+    logger.syncFailed('fetch Senate committee list', error as Error, { url: `${config.senate.baseUrl}/Committees/` });
     throw error;
+  }
+}
+
+/**
+ * Fetch detailed committee information including chair/vice-chair
+ */
+export async function fetchSenateCommitteeDetail(
+  senateCommitteeId: string
+): Promise<{ chairId: string | null; viceChairId: string | null } | null> {
+  const url = `${config.senate.baseUrl}/Committees/CommitteeDetails/${senateCommitteeId}`;
+
+  logger.debug(`Fetching committee detail: ${senateCommitteeId}`);
+
+  try {
+    const $ = await fetchHtml(url);
+
+    let chairId: string | null = null;
+    let viceChairId: string | null = null;
+
+    // Parse committee members to find chair and vice-chair
+    // Structure: .panel-senator with .senator-Text containing "Chair" or "Vice-Chair"
+    $('.panel-senator').each((_, element) => {
+      const $panel = $(element);
+      const textContent = $panel.find('.senator-Text').text().trim();
+      const href = $panel.find('a[href*="/senators/member/"]').attr('href') || '';
+
+      const districtMatch = href.match(/\/senators\/member\/(\d+)/i);
+      if (!districtMatch) return;
+
+      const district = districtMatch[1].padStart(2, '0');
+      const memberId = generateMemberId('senate', district);
+
+      if (textContent.includes('Chair') && !textContent.includes('Vice')) {
+        chairId = memberId;
+      } else if (textContent.includes('Vice-Chair') || textContent.includes('Vice Chair')) {
+        viceChairId = memberId;
+      }
+    });
+
+    return { chairId, viceChairId };
+  } catch (error) {
+    logger.warn(`Failed to fetch committee detail: ${senateCommitteeId}`, {
+      error: (error as Error).message,
+    });
+    return null;
   }
 }
 
@@ -542,94 +650,6 @@ function parseActionsPage($: cheerio.CheerioAPI, billId: string): ParsedAction[]
   return actions;
 }
 
-function parseSenatorElement(
-  $: cheerio.CheerioAPI,
-  $element: cheerio.Cheerio<Element>
-): ParsedSenator | null {
-  const district = $element.attr('data-district') ||
-    $element.find('.district').text().replace(/\D/g, '') ||
-    '';
-
-  if (!district) return null;
-
-  const name = $element.find('.senator-name, .name, h3, h4').first().text().trim();
-  const nameParts = name.split(/\s+/);
-  const lastName = nameParts.pop() || '';
-  const firstName = nameParts.join(' ');
-
-  const party = $element.find('.party').text().trim().charAt(0) as 'R' | 'D' | 'I' || 'I';
-  const email = $element.find('a[href^="mailto:"]').attr('href')?.replace('mailto:', '') || null;
-  const phone = $element.find('.phone, [data-phone]').text().trim() || null;
-  const photoUrl = $element.find('img').attr('src') || null;
-
-  return {
-    id: generateMemberId('senate', district.padStart(2, '0')),
-    chamber: 'senate',
-    district: district.padStart(2, '0'),
-    firstName,
-    lastName,
-    fullName: name,
-    party,
-    title: null,
-    email,
-    phone,
-    photoUrl,
-  };
-}
-
-function parseSenatorTableRow(
-  $: cheerio.CheerioAPI,
-  $row: cheerio.Cheerio<Element>
-): ParsedSenator | null {
-  const cells = $row.find('td');
-  if (cells.length < 3) return null;
-
-  const name = cells.eq(0).text().trim();
-  const district = cells.eq(1).text().replace(/\D/g, '');
-  const party = cells.eq(2).text().trim().charAt(0) as 'R' | 'D' | 'I' || 'I';
-
-  if (!name || !district) return null;
-
-  const nameParts = name.split(/\s+/);
-  const lastName = nameParts.pop() || '';
-  const firstName = nameParts.join(' ');
-
-  return {
-    id: generateMemberId('senate', district.padStart(2, '0')),
-    chamber: 'senate',
-    district: district.padStart(2, '0'),
-    firstName,
-    lastName,
-    fullName: name,
-    party,
-    title: null,
-    email: null,
-    phone: null,
-    photoUrl: null,
-  };
-}
-
-function parseCommitteeElement(
-  $: cheerio.CheerioAPI,
-  $element: cheerio.Cheerio<Element>
-): ParsedSenateCommittee | null {
-  const name = $element.find('.committee-name, h3, h4, a').first().text().trim();
-  if (!name) return null;
-
-  const chairText = $element.find('.chair, [data-chair]').text().trim();
-  const viceChairText = $element.find('.vice-chair, [data-vice-chair]').text().trim();
-
-  return {
-    id: generateCommitteeId('senate', name),
-    chamber: 'senate',
-    name,
-    shortName: abbreviate(name),
-    type: categorizeCommittee(name),
-    chairId: chairText ? `member:unknown:${chairText.toLowerCase().replace(/\s+/g, '_')}` : null,
-    viceChairId: viceChairText ? `member:unknown:${viceChairText.toLowerCase().replace(/\s+/g, '_')}` : null,
-  };
-}
-
 // Utility functions
 
 function parseDate(dateStr: string): string | null {
@@ -774,5 +794,6 @@ export default {
   fetchSenateBillActions,
   fetchSenatorList,
   fetchSenateCommitteeList,
+  fetchSenateCommitteeDetail,
   fetchBillStatuteMapping,
 };
