@@ -14,7 +14,11 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nSync House legislative data: committees, members, and bills\n\nDatabase now contains:\n- 65 committees \\(62 House committees with chair/vice-chair\\)\n- 160 members \\(158 House representatives with contact info\\)\n- 2,285 bills \\(1,485 House + 795 Senate\\)\n- 8,775 legislative actions\n\nData synced from official Missouri House XML feeds:\n- https://documents.house.mo.gov/xml/261-CommitteeList.XML\n- https://documents.house.mo.gov/xml/261-MemberList.XML\n- https://documents.house.mo.gov/xml/261-BillList.XML\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "WebFetch(domain:www.senate.mo.gov)",
       "Bash(npm run sync:incremental:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Bash(dir \"C:\\\\Users\\\\Joe Steelman\\\\Desktop\\\\mo-leg-tracker\\\\DataContract\\\\mo-leg-tracker\\\\sync\" /b)",
+      "Bash(npm run sync:*)",
+      "Bash(npx ts-node:*)"
     ]
   }
 }

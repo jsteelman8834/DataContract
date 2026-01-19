@@ -213,6 +213,15 @@ export interface ParsedHearing {
   billIds: string[];
 }
 
+export interface ParsedCommitteeMembership {
+  committeeId: string;
+  memberId: string;
+  memberName: string;
+  district: string;
+  position: 'chair' | 'vice_chair' | 'ranking_minority' | 'member';
+  chamber: 'house' | 'senate';
+}
+
 /**
  * Fetch and parse an XML feed
  */
@@ -423,6 +432,73 @@ export async function fetchCommitteeList(): Promise<ParsedCommittee[]> {
     return committees;
   } catch (error) {
     logger.syncFailed('fetch committee list', error as Error, { url });
+    throw error;
+  }
+}
+
+/**
+ * Fetch committee memberships from the committee list feed
+ * Returns all member-committee relationships with positions
+ */
+export async function fetchCommitteeMemberships(): Promise<ParsedCommitteeMembership[]> {
+  const url = buildHouseUrl(config.house.feeds.committeeList, {
+    SESSION: config.session.code,
+  });
+
+  logger.syncStart('fetch committee memberships', { url });
+  const startTime = Date.now();
+
+  try {
+    const data = await fetchXml<{ ROOT?: { Committee?: RawHouseCommittee | RawHouseCommittee[] } }>(url);
+
+    const rawCommittees = data.ROOT?.Committee;
+    if (!rawCommittees) {
+      logger.warn('No committees found in feed');
+      return [];
+    }
+
+    const committeeArray = Array.isArray(rawCommittees) ? rawCommittees : [rawCommittees];
+    const memberships: ParsedCommitteeMembership[] = [];
+
+    for (const committee of committeeArray) {
+      if (!committee.Name || !committee.CommitteeMembers?.CommitteeMember) continue;
+
+      const committeeId = generateCommitteeId('house', committee.Name);
+      const members = Array.isArray(committee.CommitteeMembers.CommitteeMember)
+        ? committee.CommitteeMembers.CommitteeMember
+        : [committee.CommitteeMembers.CommitteeMember];
+
+      for (const member of members) {
+        if (!member.MemberDistrict) continue;
+
+        const district = String(member.MemberDistrict).padStart(3, '0');
+        const memberId = generateMemberId('house', district);
+
+        let position: 'chair' | 'vice_chair' | 'ranking_minority' | 'member' = 'member';
+        if (member.PositionName === 'Chair') {
+          position = 'chair';
+        } else if (member.PositionName === 'Vice-Chair') {
+          position = 'vice_chair';
+        } else if (member.PositionName === 'Ranking Minority Member') {
+          position = 'ranking_minority';
+        }
+
+        memberships.push({
+          committeeId,
+          memberId,
+          memberName: member.MemberName || '',
+          district,
+          position,
+          chamber: 'house',
+        });
+      }
+    }
+
+    logger.syncComplete('fetch committee memberships', { total: memberships.length }, Date.now() - startTime);
+
+    return memberships;
+  } catch (error) {
+    logger.syncFailed('fetch committee memberships', error as Error, { url });
     throw error;
   }
 }
@@ -783,5 +859,6 @@ export default {
   fetchBillDetail,
   fetchMemberList,
   fetchCommitteeList,
+  fetchCommitteeMemberships,
   fetchHearingList,
 };
