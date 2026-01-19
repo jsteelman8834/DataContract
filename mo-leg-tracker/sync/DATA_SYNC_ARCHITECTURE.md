@@ -32,7 +32,28 @@ The Senate does not provide XML feeds. Data must be scraped:
 | Actions | `senate.mo.gov/26info/BTS_Web/Actions.aspx?SessionType=R&BillID={ID}` | Bill actions |
 | Fiscal Notes | `senate.mo.gov/26info/BTS_Web/FiscalNotes.aspx?SessionType=R&BillID={ID}` | Fiscal notes |
 | Senators | `senate.mo.gov/Senators/` | Senator roster |
-| Committees | `senate.mo.gov/Committees/` | Committee list |
+| Committees | `senate.mo.gov/Committees/CommitteeGroup/{1,2,5,8}` | Committee groups |
+| Committee Detail | `senate.mo.gov/Committees/CommitteeDetails/{ID}` | Chair/members |
+
+**HTML Structure (as of 2026):**
+
+Senators page uses `.panel-senator` cards:
+```html
+<div class="panel-senator">
+  <a href="/Senators/Member/{district}">
+    <img src="...{Name}{district}.jpg" title="Senator {Name}" />
+  </a>
+  <div class="senator-Text">
+    <strong>Senator {Name}<br />District {number}</strong>
+  </div>
+</div>
+```
+
+Committees are organized by group type:
+- Group 1: Standing Committees
+- Group 2: Statutory Committees
+- Group 5: Select Committees
+- Group 8: Task Forces
 
 **Text Files** (easier to parse):
 - `senate.mo.gov/bstats/bybill26.txt` - Bills with affected statutes
@@ -380,37 +401,39 @@ LOG_LEVEL=info
 
 ### Phase 1: Core Infrastructure
 - [x] Architecture document
-- [ ] Configuration module
-- [ ] Rate limiter utility
-- [ ] Logger setup
+- [x] Configuration module (`config.ts`)
+- [x] Rate limiter utility (`utils/rate-limiter.ts`)
+- [x] Logger setup (`utils/logger.ts`)
 
 ### Phase 2: House XML Parsing
-- [ ] XML feed fetcher
-- [ ] Bill list parser
-- [ ] Bill detail parser
-- [ ] Member/committee parser
+- [x] XML feed fetcher
+- [x] Bill list parser
+- [x] Bill detail parser (with actions)
+- [x] Member/committee parser
 
 ### Phase 3: Senate Scraping
-- [ ] HTML scraper setup
-- [ ] Bill list scraper
-- [ ] Bill detail scraper
-- [ ] Action parser
+- [x] HTML scraper setup (Cheerio)
+- [x] Bill list scraper
+- [x] Bill detail scraper
+- [x] Action parser
+- [x] Senator list scraper (`.panel-senator` cards)
+- [x] Committee group scraper (`/Committees/CommitteeGroup/{id}`)
 
 ### Phase 4: Database Integration
-- [ ] Graph writer
-- [ ] Merge strategy
-- [ ] Change detection
+- [x] Graph writer (`database/graph-writer.ts`)
+- [x] Merge strategy (upsert)
+- [x] Change detection (hash-based)
 
 ### Phase 5: Fiscal Notes
-- [ ] PDF URL builder
-- [ ] PDF text extraction
-- [ ] Amount parser
-- [ ] Fund type detection
+- [x] PDF URL builder
+- [x] Fiscal note parser (`sources/fiscal-note-parser.ts`)
+- [ ] Amount parser (basic implementation)
+- [ ] Fund type detection (partial)
 
 ### Phase 6: Orchestration
-- [ ] Full sync command
-- [ ] Incremental sync command
-- [ ] Targeted sync command
+- [x] Full sync command
+- [x] Incremental sync command
+- [ ] Targeted sync command (partial)
 - [ ] Scheduler setup
 
 ---
