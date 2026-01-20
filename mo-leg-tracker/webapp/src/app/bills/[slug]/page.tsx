@@ -8,6 +8,7 @@ import { cn, formatDate, getPartyColor, getBillTypeLabel } from '@/lib/utils';
 import { getPassageProbability } from '@/lib/fiscal-utils';
 import { STATUS_LABELS } from '@/types';
 import { FiscalSummaryCard, FiscalDetailModal } from '@/components/fiscal';
+import { BillChatSidebar, ChatToggleButton, VersionDiffModal } from '@/components/chat';
 import {
   FileText,
   User,
@@ -19,6 +20,8 @@ import {
   ArrowLeft,
   CheckCircle,
   AlertCircle,
+  MessageSquare,
+  GitCompare,
 } from 'lucide-react';
 
 interface BillPageProps {
@@ -28,6 +31,8 @@ interface BillPageProps {
 export default function BillPage({ params }: BillPageProps) {
   const { slug } = use(params);
   const [fiscalModalOpen, setFiscalModalOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
 
   // Convert slug (e.g., "sb-834") to bill number (e.g., "SB 834")
   const billNumber = slug.toUpperCase().replace('-', ' ');
@@ -338,6 +343,38 @@ export default function BillPage({ params }: BillPageProps) {
             </section>
           )}
 
+          {/* AI Analysis Tools */}
+          <section className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              AI Analysis
+            </h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => setChatOpen(true)}
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Ask about this bill
+                </span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {billVersions.length >= 2 && (
+                <button
+                  onClick={() => setDiffModalOpen(true)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <GitCompare className="w-4 h-4" />
+                    Compare versions
+                  </span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </section>
+
           {/* External Links */}
           <section className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
@@ -423,6 +460,28 @@ export default function BillPage({ params }: BillPageProps) {
           onClose={() => setFiscalModalOpen(false)}
         />
       )}
+
+      {/* AI Chat Sidebar */}
+      <BillChatSidebar
+        billId={bill.id}
+        billNumber={bill.billNumber}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
+
+      {/* Chat Toggle Button */}
+      <ChatToggleButton
+        onClick={() => setChatOpen(!chatOpen)}
+        isOpen={chatOpen}
+      />
+
+      {/* Version Diff Modal */}
+      <VersionDiffModal
+        billId={bill.id}
+        billNumber={bill.billNumber}
+        isOpen={diffModalOpen}
+        onClose={() => setDiffModalOpen(false)}
+      />
     </div>
   );
 }

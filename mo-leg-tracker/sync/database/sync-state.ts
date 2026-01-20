@@ -18,6 +18,13 @@ export interface SyncState {
   lastSync: LastSyncInfo;
   feeds: Record<string, FeedState>;
   bills: Record<string, BillState>;
+  // For event detection - stores previous state snapshot
+  previousSnapshot?: {
+    bills: Record<string, unknown>;
+    hearings: Record<string, unknown>;
+    fiscal_notes: Record<string, unknown>;
+    capturedAt: string;
+  };
 }
 
 interface LastSyncInfo {
@@ -311,6 +318,36 @@ function computeHash(content: string): string {
   return createHash('md5').update(content).digest('hex');
 }
 
+/**
+ * Synchronous read for event detection
+ */
+export function readSyncState(): SyncState {
+  const statePath = path.resolve(config.database.syncStatePath);
+
+  try {
+    const fs = require('fs');
+    const content = fs.readFileSync(statePath, 'utf-8');
+    return JSON.parse(content) as SyncState;
+  } catch {
+    return createEmptyState();
+  }
+}
+
+/**
+ * Synchronous write for event detection
+ */
+export function writeSyncState(state: SyncState): void {
+  const statePath = path.resolve(config.database.syncStatePath);
+  const fs = require('fs');
+
+  try {
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
+  } catch (error) {
+    logger.error('Failed to write sync state', { error: (error as Error).message });
+  }
+}
+
 export default {
   loadSyncState,
   saveSyncState,
@@ -322,4 +359,6 @@ export default {
   recordSyncComplete,
   getStaleBills,
   clearBillStates,
+  readSyncState,
+  writeSyncState,
 };

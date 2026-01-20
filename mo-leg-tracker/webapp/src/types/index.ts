@@ -75,6 +75,22 @@ export interface BillVersion {
   pageCount: number;
   effectiveDate: string;
   createdAt: string;
+  // PDF extraction fields
+  extractedText?: string;
+  tokenCount?: number;
+  chunks?: TextChunk[];
+  aiSummary?: string;
+  aiSummaryGeneratedAt?: string;
+}
+
+export interface TextChunk {
+  id: string;
+  index: number;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  tokenCount: number;
+  section?: string;
 }
 
 export interface Amendment {
@@ -446,4 +462,84 @@ export interface RiskQuadrantBill {
   absoluteImpact: number;
   impactType: 'cost' | 'revenue';
   quadrant: 'critical' | 'watch' | 'tracking' | 'monitor';
+}
+
+// AI Chat types
+export interface ChatSession {
+  id: string;
+  billId: string;
+  messages: ChatMessage[];
+  tokenUsage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalCost: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+// Semantic diff types
+export interface SemanticChange {
+  id: string;
+  type: 'policy' | 'scope' | 'fiscal' | 'timeline' | 'enforcement' | 'technical';
+  severity: 'major' | 'moderate' | 'minor';
+  location: string;
+  summary: string;
+  details: string;
+  beforeText?: string;
+  afterText?: string;
+}
+
+export interface SemanticDiffResult {
+  billId: string;
+  version1: string;
+  version2: string;
+  changes: SemanticChange[];
+  summary: string;
+  totalChanges: number;
+  majorChanges: number;
+  analyzedAt: string;
+}
+
+// Legislative event types
+export type EventType =
+  | 'bill_status_change'
+  | 'hearing_scheduled'
+  | 'hearing_cancelled'
+  | 'fiscal_note_released'
+  | 'fiscal_note_revised'
+  | 'passed_committee'
+  | 'passed_chamber'
+  | 'floor_action'
+  | 'governor_action'
+  | 'deadline_approaching'
+  | 'new_bill_introduced'
+  | 'amendment_filed'
+  | 'amendment_adopted'
+  | 'vote_recorded';
+
+export interface LegislativeEvent {
+  id: string;
+  type: EventType;
+  timestamp: string;
+  billId: string;
+  billNumber: string;
+  chamber: 'house' | 'senate';
+  previousStatus?: string;
+  newStatus?: string;
+  committee?: string;
+  hearingDate?: string;
+  hearingTime?: string;
+  fiscalImpact?: number;
+  voteResult?: { yeas: number; nays: number };
+  severity: 'high' | 'medium' | 'low';
+  description: string;
+  webhooksDelivered: string[];
+  webhooksPending: string[];
+  createdAt: string;
 }

@@ -434,7 +434,240 @@ LOG_LEVEL=info
 - [x] Full sync command
 - [x] Incremental sync command
 - [ ] Targeted sync command (partial)
-- [ ] Scheduler setup
+- [x] Scheduler setup (node-cron)
+
+### Phase 7: Event Detection & Notifications
+- [x] Event type definitions (14 types)
+- [x] Status change detection
+- [x] Hearing change detection
+- [x] Fiscal note change detection
+- [x] Event persistence (JSON store)
+- [x] Webhook dispatcher (HMAC signed)
+- [x] Retry queue with exponential backoff
+- [x] Multi-channel notifications (Email, Slack, Discord, SMS)
+
+### Phase 8: AI Analysis & Semantic Features
+- [x] AI provider abstraction (OpenAI/Anthropic)
+- [x] PDF text extraction with caching
+- [x] Token-aware text chunking
+- [x] Bill section parsing
+- [x] Semantic diff detection between versions
+- [x] Chat API endpoint
+- [x] React chat components
+
+---
+
+## Event System Architecture
+
+The sync system now includes comprehensive event detection and notification:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         SYNC COMPLETES                                   │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      EVENT DETECTOR                                      │
+│  Compare previousSnapshot vs currentState                               │
+│  • Bill status changes → bill_status_change, passed_committee, etc.    │
+│  • Hearing additions/removals → hearing_scheduled, hearing_cancelled   │
+│  • Fiscal note changes → fiscal_note_released, fiscal_note_revised     │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       EVENT STORE (db/events.json)                       │
+│  • Stores last 10,000 events                                            │
+│  • Tracks webhook delivery status per event                             │
+│  • Supports filtering by type, chamber, severity                        │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     WEBHOOK DISPATCHER                                   │
+│  • HMAC-SHA256 signed payloads                                          │
+│  • Configurable subscriptions with filters                              │
+│  • Retry queue with exponential backoff                                 │
+└──────┬────────────────┬────────────────┬────────────────┬───────────────┘
+       │                │                │                │
+       ▼                ▼                ▼                ▼
+   ┌───────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐
+   │ Email │      │  Slack  │      │ Discord │      │   SMS   │
+   │SendGrid│     │ Webhook │      │ Webhook │      │ Twilio  │
+   └───────┘      └─────────┘      └─────────┘      └─────────┘
+```
+
+### Event Types
+
+| Event Type | Severity | Trigger |
+|------------|----------|---------|
+| `bill_status_change` | medium | Any status transition |
+| `hearing_scheduled` | medium | New hearing added |
+| `hearing_cancelled` | medium | Hearing status → cancelled |
+| `fiscal_note_released` | medium | New fiscal note for bill |
+| `fiscal_note_revised` | low | Fiscal note updated |
+| `passed_committee` | high | Status → reported_do_pass |
+| `passed_chamber` | high | Status → passed_chamber |
+| `floor_action` | medium | placed_on_calendar, perfected, third_read |
+| `governor_action` | high | signed, vetoed, enacted |
+| `deadline_approaching` | high | Bill stalled past threshold |
+| `new_bill_introduced` | low | New bill detected |
+| `amendment_filed` | low | Amendment added |
+| `amendment_adopted` | medium | Amendment status → adopted |
+| `vote_recorded` | medium | Vote recorded on bill |
+
+---
+
+## AI Chatbot Architecture
+
+The webapp includes an AI-powered bill analysis chatbot:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        USER INTERFACE                                    │
+│  BillChatSidebar.tsx - Floating chat panel on bill detail pages        │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     /api/chat ENDPOINT                                   │
+│  • Session management (in-memory)                                       │
+│  • Rate limiting (100 req/day/session)                                  │
+│  • Actions: chat, summary, compare                                      │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      CHAT HANDLER                                        │
+│  • Token budget management (100k input, 4k output)                      │
+│  • Context building (bill text + history)                               │
+│  • Cost tracking per session                                            │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    AI PROVIDER ABSTRACTION                               │
+│  ┌─────────────────┐              ┌─────────────────┐                   │
+│  │  OpenAI GPT-4   │     OR       │  Anthropic      │                   │
+│  │  (128k context) │              │  Claude 3.5     │                   │
+│  │  $0.01/1k in    │              │  (200k context) │                   │
+│  └─────────────────┘              └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### PDF Extraction Pipeline
+
+```
+PDF URL → Download → pdf-parse → Clean Text → Chunk (4k tokens) → Store
+                                     │
+                                     ▼
+                            Section Parser
+                            • Title extraction
+                            • Section numbering
+                            • Definition detection
+                            • RSMO references
+                            • Effective date
+```
+
+### Semantic Diff Detection
+
+Compares bill versions using AI to identify:
+
+| Change Type | Description |
+|-------------|-------------|
+| `policy` | New requirements, modified rules |
+| `scope` | Who/what is affected |
+| `fiscal` | Dollar amounts, funding |
+| `timeline` | Effective dates, deadlines |
+| `enforcement` | Penalties, oversight |
+| `technical` | Non-substantive corrections |
+
+Severity levels: `major`, `moderate`, `minor`
+
+---
+
+## Updated Module Structure
+
+```
+mo-leg-tracker/
+├── sync/
+│   ├── DATA_SYNC_ARCHITECTURE.md
+│   ├── index.ts
+│   ├── config.ts
+│   │
+│   ├── sources/
+│   │   ├── house-xml-parser.ts
+│   │   ├── senate-scraper.ts
+│   │   └── fiscal-note-parser.ts
+│   │
+│   ├── database/
+│   │   ├── graph-writer.ts
+│   │   └── sync-state.ts
+│   │
+│   ├── scheduler/                    # NEW
+│   │   ├── index.ts                  # node-cron scheduler
+│   │   ├── schedules.ts              # Cron expressions
+│   │   └── job-runner.ts             # Execution wrapper
+│   │
+│   ├── events/                       # NEW
+│   │   ├── types.ts                  # Event type definitions
+│   │   ├── detector.ts               # Change detection
+│   │   └── store.ts                  # JSON persistence
+│   │
+│   ├── webhooks/                     # NEW
+│   │   ├── config.ts                 # Subscription management
+│   │   ├── dispatcher.ts             # HMAC-signed delivery
+│   │   └── retry-queue.ts            # Exponential backoff
+│   │
+│   ├── notifications/                # NEW
+│   │   ├── index.ts                  # Unified dispatcher
+│   │   ├── email.ts                  # SendGrid
+│   │   ├── slack.ts                  # Slack webhooks
+│   │   ├── discord.ts                # Discord webhooks
+│   │   ├── sms.ts                    # Twilio
+│   │   └── templates.ts              # Message formatting
+│   │
+│   ├── diff/                         # NEW
+│   │   ├── etag-cache.ts             # HTTP caching
+│   │   └── tracker.ts                # Content hash tracking
+│   │
+│   ├── pdf/                          # NEW
+│   │   ├── extractor.ts              # PDF text extraction
+│   │   ├── chunker.ts                # Token-aware chunking
+│   │   └── section-parser.ts         # Bill structure parsing
+│   │
+│   └── utils/
+│       ├── rate-limiter.ts
+│       └── logger.ts
+│
+├── webapp/
+│   └── src/
+│       ├── app/api/chat/             # NEW
+│       │   └── route.ts              # Chat API endpoint
+│       │
+│       ├── components/chat/          # NEW
+│       │   ├── BillChatSidebar.tsx
+│       │   ├── ChatMessage.tsx
+│       │   ├── ChatInput.tsx
+│       │   ├── SuggestedQuestions.tsx
+│       │   └── VersionDiffModal.tsx
+│       │
+│       └── lib/ai/                   # NEW
+│           ├── providers/index.ts    # OpenAI/Anthropic abstraction
+│           ├── prompts.ts            # System prompts
+│           ├── chat-handler.ts       # Context management
+│           ├── token-counter.ts      # Usage tracking
+│           └── semantic-diff.ts      # Version comparison
+│
+├── db/
+│   ├── graph.json
+│   ├── sync-state.json
+│   ├── events.json                   # NEW - Event store
+│   ├── webhooks.json                 # NEW - Webhook config
+│   ├── etag-cache.json               # NEW - HTTP cache
+│   └── diff-state.json               # NEW - Change tracking
+```
 
 ---
 
