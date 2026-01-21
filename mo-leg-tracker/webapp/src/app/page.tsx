@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import legislativeData from '@/data/legislative-data';
 import { ChamberView } from '@/components/dashboard/ChamberView';
@@ -8,6 +8,7 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { MiniCalendar } from '@/components/calendar/CalendarView';
 import { BillCard } from '@/components/bills/BillCard';
 import { BillsToWatch } from '@/components/dashboard/BillsToWatch';
+import { BillChatSidebar } from '@/components/chat/BillChatSidebar';
 import {
   FileText,
   Users,
@@ -20,6 +21,16 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const [chatBill, setChatBill] = useState<{ id: string; billNumber: string } | null>(null);
+
+  const handleAskAI = useCallback((billId: string, billNumber: string) => {
+    setChatBill({ id: billId, billNumber });
+  }, []);
+
+  const handleCloseChat = useCallback(() => {
+    setChatBill(null);
+  }, []);
+
   const stats = legislativeData.getStatistics();
 
   const senateCommittees = useMemo(() => {
@@ -111,6 +122,7 @@ export default function DashboardPage() {
           <BillsToWatch
             watchBills={billsToWatch}
             recentlyActiveBills={recentlyActiveBills}
+            onAskAI={handleAskAI}
           />
         </div>
       )}
@@ -214,6 +226,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Chat Sidebar */}
+      {chatBill && (
+        <BillChatSidebar
+          billId={chatBill.id}
+          billNumber={chatBill.billNumber}
+          isOpen={true}
+          onClose={handleCloseChat}
+        />
+      )}
     </div>
   );
 }

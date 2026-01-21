@@ -60,6 +60,47 @@ function createStats(): SyncStats {
 }
 
 /**
+ * Find a member by name in the database
+ * Searches by lastName match (case-insensitive) within a specific chamber
+ */
+function findMemberByName(db: GraphDatabase, name: string, chamber: 'house' | 'senate'): string | null {
+  if (!name) return null;
+
+  const normalizedName = name.toLowerCase().trim();
+  const members = Object.values(db.nodes.members || {}) as Array<{
+    id: string;
+    chamber: string;
+    lastName: string;
+    fullName: string;
+  }>;
+
+  // First try exact lastName match
+  for (const member of members) {
+    if (member.chamber === chamber && member.lastName.toLowerCase() === normalizedName) {
+      return member.id;
+    }
+  }
+
+  // Try matching last word of the sponsor name with lastName
+  const nameParts = normalizedName.split(/\s+/);
+  const lastName = nameParts[nameParts.length - 1];
+  for (const member of members) {
+    if (member.chamber === chamber && member.lastName.toLowerCase() === lastName) {
+      return member.id;
+    }
+  }
+
+  // Try fullName contains match as last resort
+  for (const member of members) {
+    if (member.chamber === chamber && member.fullName.toLowerCase().includes(normalizedName)) {
+      return member.id;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Full sync - fetch all data from both chambers
  */
 export async function fullSync(): Promise<SyncStats> {
@@ -485,11 +526,18 @@ async function processSenateBill(
   // Create session edge
   upsertEdge(db, 'IN_SESSION', bill.id, `session:${config.session.code}`);
 
-  // Create sponsor edge
-  if (bill.sponsor?.memberId) {
-    upsertEdge(db, 'SPONSORED_BY', bill.id, bill.sponsor.memberId, {
-      sponsorType: 'primary',
-    });
+  // Create sponsor edge - try memberId first, fall back to name lookup
+  if (bill.sponsor) {
+    let sponsorId = bill.sponsor.memberId;
+    if (!sponsorId && bill.sponsor.name) {
+      // Try to find the member by name
+      sponsorId = findMemberByName(db, bill.sponsor.name, 'senate') || '';
+    }
+    if (sponsorId) {
+      upsertEdge(db, 'SPONSORED_BY', bill.id, sponsorId, {
+        sponsorType: 'primary',
+      });
+    }
   }
 
   // Create committee assignment edge

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { cn, formatDate, getPartyColor } from '@/lib/utils';
 import { BillCard as BillCardComponent } from '@/components/bills/BillCard';
+import { ExpandablePanel } from '@/components/dashboard/ExpandablePanel';
 import { STATUS_LABELS } from '@/types';
 import type { BillCard } from '@/types';
 import {
@@ -19,13 +20,15 @@ import {
 interface BillsToWatchProps {
   watchBills: BillCard[];
   recentlyActiveBills: BillCard[];
+  onAskAI?: (billId: string, billNumber: string) => void;
 }
 
 type ViewMode = 'watch' | 'recent';
 
-export function BillsToWatch({ watchBills, recentlyActiveBills }: BillsToWatchProps) {
+export function BillsToWatch({ watchBills, recentlyActiveBills, onAskAI }: BillsToWatchProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('recent');
   const [expandedStatus, setExpandedStatus] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const bills = viewMode === 'watch' ? watchBills : recentlyActiveBills;
 
@@ -58,62 +61,80 @@ export function BillsToWatch({ watchBills, recentlyActiveBills }: BillsToWatchPr
     'signed', 'enacted'];
   const advancedBillsCount = watchBills.filter(b => advancedStatuses.includes(b.bill.currentStatus)).length;
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-mo-navy to-mo-blue">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center text-white">
-            <Eye className="w-5 h-5 mr-2" />
-            <h2 className="text-lg font-bold">Bills to Watch</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
-            <div className="flex rounded-lg overflow-hidden bg-white/20">
-              <button
-                onClick={() => setViewMode('recent')}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1',
-                  viewMode === 'recent'
-                    ? 'bg-white text-mo-navy'
-                    : 'text-white hover:bg-white/10'
-                )}
-              >
-                <Clock className="w-3 h-3" />
-                Recent Activity ({recentlyActiveBills.length})
-              </button>
-              <button
-                onClick={() => setViewMode('watch')}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1',
-                  viewMode === 'watch'
-                    ? 'bg-white text-mo-navy'
-                    : 'text-white hover:bg-white/10'
-                )}
-              >
-                <TrendingUp className="w-3 h-3" />
-                Progressing ({watchBills.length})
-              </button>
-            </div>
-          </div>
+  const renderHeader = (controls: React.ReactNode) => (
+    <div className="p-4 bg-gradient-to-r from-mo-navy to-mo-blue">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center text-white">
+          <Eye className="w-5 h-5 mr-2" />
+          <h2 className="text-lg font-bold">Bills to Watch</h2>
         </div>
-
-        {/* Quick Stats */}
-        <div className="flex gap-4 mt-3 text-white/90 text-sm">
-          <span className="flex items-center gap-1">
-            <Activity className="w-4 h-4" />
-            {advancedBillsCount} past committee
-          </span>
-          <span className="flex items-center gap-1">
-            <Calendar className="w-4 h-4" />
-            {watchBills.filter(b => b.hasUpcomingHearing).length} with hearings
-          </span>
-          <span className="flex items-center gap-1">
-            <DollarSign className="w-4 h-4" />
-            {watchBills.filter(b => b.fiscalNote).length} with fiscal notes
-          </span>
+        <div className="flex items-center gap-3">
+          {/* View Mode Toggle */}
+          <div className="flex rounded-lg overflow-hidden bg-white/20">
+            <button
+              onClick={() => setViewMode('recent')}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1',
+                viewMode === 'recent'
+                  ? 'bg-white text-mo-navy'
+                  : 'text-white hover:bg-white/10'
+              )}
+            >
+              <Clock className="w-3 h-3" />
+              Recent Activity ({recentlyActiveBills.length})
+            </button>
+            <button
+              onClick={() => setViewMode('watch')}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1',
+                viewMode === 'watch'
+                  ? 'bg-white text-mo-navy'
+                  : 'text-white hover:bg-white/10'
+              )}
+            >
+              <TrendingUp className="w-3 h-3" />
+              Progressing ({watchBills.length})
+            </button>
+          </div>
+          {/* Panel expand/fullscreen controls */}
+          {controls}
         </div>
       </div>
+
+      {/* Quick Stats */}
+      <div className="flex items-center gap-4 mt-3 text-white/90 text-sm">
+        <span className="flex items-center gap-1">
+          <Activity className="w-4 h-4" />
+          {advancedBillsCount} past committee
+        </span>
+        <span className="flex items-center gap-1">
+          <Calendar className="w-4 h-4" />
+          {watchBills.filter(b => b.hasUpcomingHearing).length} with hearings
+        </span>
+        <span className="flex items-center gap-1">
+          <DollarSign className="w-4 h-4" />
+          {watchBills.filter(b => b.fiscalNote).length} with fiscal notes
+        </span>
+        <div className="flex-1" />
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="px-3 py-1 rounded-full text-xs bg-white/20 hover:bg-white/30 transition-colors"
+        >
+          {isExpanded ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <ExpandablePanel
+      renderHeader={renderHeader}
+      collapsedHeight="150px"
+      expandedHeight="400px"
+      expanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      showFade={true}
+    >
 
       {/* Content */}
       {viewMode === 'watch' ? (
@@ -163,6 +184,8 @@ export function BillsToWatch({ watchBills, recentlyActiveBills }: BillsToWatchPr
                             key={billCard.bill.id}
                             billCard={billCard}
                             compact
+                            showAskAI
+                            onAskAI={onAskAI}
                           />
                         ))}
                     </div>
@@ -189,7 +212,7 @@ export function BillsToWatch({ watchBills, recentlyActiveBills }: BillsToWatchPr
                     {billCard.bill.lastActionDate && formatDate(billCard.bill.lastActionDate)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <BillCardComponent billCard={billCard} compact />
+                    <BillCardComponent billCard={billCard} compact showAskAI onAskAI={onAskAI} />
                   </div>
                 </div>
               ))}
@@ -212,6 +235,6 @@ export function BillsToWatch({ watchBills, recentlyActiveBills }: BillsToWatchPr
           View All Bills <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
-    </div>
+    </ExpandablePanel>
   );
 }

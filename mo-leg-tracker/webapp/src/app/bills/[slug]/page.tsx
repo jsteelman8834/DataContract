@@ -7,6 +7,7 @@ import legislativeData from '@/data/legislative-data';
 import { cn, formatDate, getPartyColor, getBillTypeLabel } from '@/lib/utils';
 import { getPassageProbability } from '@/lib/fiscal-utils';
 import { STATUS_LABELS } from '@/types';
+import type { Topic } from '@/types';
 import { FiscalSummaryCard, FiscalDetailModal } from '@/components/fiscal';
 import { BillChatSidebar, ChatToggleButton, VersionDiffModal } from '@/components/chat';
 import {
@@ -22,7 +23,16 @@ import {
   AlertCircle,
   MessageSquare,
   GitCompare,
+  Tag,
 } from 'lucide-react';
+
+// Helper to get topic info for badges
+function getTopicBadges(topicIds: string[] | undefined): Topic[] {
+  if (!topicIds || topicIds.length === 0) return [];
+  return topicIds
+    .map((id) => legislativeData.getTopicById(id))
+    .filter((t): t is Topic => t !== null);
+}
 
 interface BillPageProps {
   params: Promise<{ slug: string }>;
@@ -116,6 +126,31 @@ export default function BillPage({ params }: BillPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Topic Badges */}
+      {bill.topics && bill.topics.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Tag className="w-4 h-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">Topics</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {getTopicBadges(bill.topics).map((topic) => (
+              <Link
+                key={topic.id}
+                href={`/bills?topic=${topic.id.replace('topic:', '')}`}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-sm font-medium transition-all hover:scale-105',
+                  topic.color
+                )}
+                title={topic.description}
+              >
+                {topic.icon} {topic.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}

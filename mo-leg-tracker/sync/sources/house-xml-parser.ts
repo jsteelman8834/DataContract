@@ -607,6 +607,26 @@ function parseBillFromDetail(raw: RawHouseBill, prefix: string, number: number):
     currentStatus = mapStatusFromDescription(raw.LastAction);
   }
 
+  // Extract committee from actions - find the most recent referral action
+  let currentCommittee: string | null = null;
+  if (actions.length > 0) {
+    // Sort actions by date descending to find most recent committee referral
+    const sortedActions = [...actions].sort((a, b) => b.actionDate.localeCompare(a.actionDate));
+    for (const action of sortedActions) {
+      const desc = action.actionDescription;
+      // Match formats like "Referred: Emerging Issues(H)" or "Referred to Committee on XYZ"
+      let match = desc.match(/Referred:\s*(.+?)\s*\([HS]\)/i);
+      if (!match) {
+        match = desc.match(/referred to\s+(?:house\s+)?(?:committee\s+on\s+)?(.+?)(?:\s*\(|$)/i);
+      }
+      if (match) {
+        const committeeName = match[1].trim();
+        currentCommittee = generateCommitteeId('house', committeeName);
+        break;
+      }
+    }
+  }
+
   // Parse dates
   const effectiveDate = raw.ProposedEffectiveDate ? parseDate(raw.ProposedEffectiveDate) : null;
 
@@ -645,7 +665,7 @@ function parseBillFromDetail(raw: RawHouseBill, prefix: string, number: number):
     briefDescription: raw.Title?.ShortTitle || raw.Title?.LongTitle || '',
     lrNumber,
     currentStatus,
-    currentCommittee: null, // Would need to parse from actions
+    currentCommittee,
     effectiveDate,
     introducedDate,
     lastActionDate,

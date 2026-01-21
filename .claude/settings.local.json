@@ -18,7 +18,9 @@
       "Bash(python:*)",
       "Bash(dir \"C:\\\\Users\\\\Joe Steelman\\\\Desktop\\\\mo-leg-tracker\\\\DataContract\\\\mo-leg-tracker\\\\sync\" /b)",
       "Bash(npm run sync:*)",
-      "Bash(npx ts-node:*)"
+      "Bash(npx ts-node:*)",
+      "WebSearch",
+      "WebFetch(domain:documents.house.mo.gov)"
     ]
   }
 }

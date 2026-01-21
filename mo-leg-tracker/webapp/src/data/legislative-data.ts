@@ -18,6 +18,7 @@ import type {
   FiscalSummary,
   CommitteeFiscalSummary,
   RiskQuadrantBill,
+  Topic,
 } from '@/types';
 import {
   getPassageProbability,
@@ -108,6 +109,69 @@ class LegislativeDataService {
 
   getCommitteesByChamber(chamber: 'house' | 'senate'): Committee[] {
     return this.getAllCommittees().filter((committee) => committee.chamber === chamber);
+  }
+
+  // Topics
+  getAllTopics(): Topic[] {
+    if (!this.data.nodes.topics) return [];
+    return Object.values(this.data.nodes.topics);
+  }
+
+  getTopicById(id: string): Topic | null {
+    if (!this.data.nodes.topics) return null;
+    // Handle both "topic:taxes" and "taxes" format
+    const normalizedId = id.startsWith('topic:') ? id : `topic:${id}`;
+    return this.data.nodes.topics[normalizedId] || null;
+  }
+
+  getBillsByTopic(topicId: string): Bill[] {
+    // Normalize topic ID (strip "topic:" prefix if present)
+    const normalizedId = topicId.startsWith('topic:') ? topicId.replace('topic:', '') : topicId;
+    return this.getAllBills().filter((bill) =>
+      bill.topics?.includes(normalizedId)
+    );
+  }
+
+  /**
+   * Get count of bills per topic for displaying on filter chips
+   */
+  getTopicCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+
+    // Initialize all topics with 0
+    for (const topic of this.getAllTopics()) {
+      const topicId = topic.id.replace('topic:', '');
+      counts.set(topicId, 0);
+    }
+
+    // Count bills per topic
+    for (const bill of this.getAllBills()) {
+      if (bill.topics) {
+        for (const topicId of bill.topics) {
+          counts.set(topicId, (counts.get(topicId) || 0) + 1);
+        }
+      }
+    }
+
+    return counts;
+  }
+
+  /**
+   * Get topics with their bill counts, sorted by count descending
+   */
+  getTopicsWithCounts(): Array<{ topic: Topic; count: number }> {
+    const counts = this.getTopicCounts();
+    const topics = this.getAllTopics();
+
+    return topics
+      .map((topic) => {
+        const topicId = topic.id.replace('topic:', '');
+        return {
+          topic,
+          count: counts.get(topicId) || 0,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
   }
 
   // Hearings
@@ -436,6 +500,7 @@ class LegislativeDataService {
   // Computed data for UI
   getBillCard(bill: Bill): BillCard {
     const sponsor = this.getSponsorForBill(bill.id);
+    const coSponsors = this.getCoSponsorsForBill(bill.id);
     const summary = this.getSummaryForBill(bill.id);
     const fiscalNote = this.getFiscalNoteForBill(bill.id);
     const assignment = this.data.edges.ASSIGNED_TO.find(
@@ -451,6 +516,31 @@ class LegislativeDataService {
       (h) => h.hearingDate >= new Date().toISOString().split('T')[0]
     );
 
+    // Get details of the next upcoming hearing
+    let upcomingHearing = null;
+    if (upcomingHearings.length > 0) {
+      const nextHearing = upcomingHearings.sort((a, b) => a.hearingDate.localeCompare(b.hearingDate))[0];
+      const committee = this.getCommitteeById(nextHearing.committeeId);
+      upcomingHearing = {
+        date: nextHearing.hearingDate,
+        time: nextHearing.hearingTime,
+        room: nextHearing.room,
+        committeeName: committee?.shortName || committee?.name || 'Unknown Committee',
+      };
+    }
+
+    // Determine if bipartisan (has both R and D among sponsor + co-sponsors)
+    const allSponsors = sponsor ? [sponsor, ...coSponsors] : coSponsors;
+    const parties = new Set(allSponsors.map(m => m.party));
+    const isBipartisan = parties.has('R') && parties.has('D');
+
+    // Resolve committee name from committee ID
+    let committeeName: string | null = null;
+    if (bill.currentCommittee) {
+      const committee = this.getCommitteeById(bill.currentCommittee);
+      committeeName = committee?.shortName || committee?.name || bill.currentCommittee;
+    }
+
     const passageProbability = getPassageProbability(bill.currentStatus);
     const weightedFiscalImpact = fiscalNote
       ? calculateWeightedImpact(fiscalNote.netImpact, passageProbability)
@@ -461,10 +551,13 @@ class LegislativeDataService {
       sponsor,
       daysInCommittee,
       hasUpcomingHearing: upcomingHearings.length > 0,
+      upcomingHearing,
       summary,
       fiscalNote,
       passageProbability,
       weightedFiscalImpact,
+      isBipartisan,
+      committeeName,
     };
   }
 

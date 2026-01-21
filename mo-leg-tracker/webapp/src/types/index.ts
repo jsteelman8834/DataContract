@@ -30,8 +30,19 @@ export interface Bill {
   lastActionDate: string;
   withdrawn: boolean;
   senateBillId?: string; // Internal Senate BTS Web ID (for Senate bills only)
+  topics?: string[]; // Array of topic IDs e.g., ["taxes", "housing"]
   createdAt: string;
   updatedAt: string;
+}
+
+// Topic taxonomy for citizen-friendly bill categorization
+export interface Topic {
+  id: string;           // e.g., "taxes"
+  name: string;         // e.g., "Taxes & Budget"
+  icon: string;         // Emoji icon e.g., "💰"
+  description: string;  // Short description for tooltips
+  keywords: string[];   // For auto-classification
+  color: string;        // Tailwind color class for UI badges
 }
 
 export type BillStatus =
@@ -317,6 +328,7 @@ export interface LegislativeGraph {
     committees: Record<string, Committee>;
     hearings: Record<string, Hearing>;
     testimony: Record<string, Testimony>;
+    topics: Record<string, Topic>;
   };
   edges: {
     SPONSORED_BY: Edge<SponsorshipEdge>[];
@@ -352,15 +364,27 @@ export interface LegislativeGraph {
 }
 
 // UI specific types
+export interface UpcomingHearingInfo {
+  date: string;
+  time: string;
+  room: string;
+  committeeName: string;
+}
+
 export interface BillCard {
   bill: Bill;
   sponsor: Member | null;
   daysInCommittee: number;
   hasUpcomingHearing: boolean;
+  upcomingHearing: UpcomingHearingInfo | null;
   summary: Summary | null;
   fiscalNote: FiscalNote | null;
   passageProbability: number;
   weightedFiscalImpact: number;
+  /** Whether the bill has bipartisan sponsorship (R+D sponsors/co-sponsors) */
+  isBipartisan: boolean;
+  /** Resolved committee name (not code) */
+  committeeName: string | null;
 }
 
 export interface CommitteeWithBills {
